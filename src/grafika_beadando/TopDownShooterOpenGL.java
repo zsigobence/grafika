@@ -532,8 +532,6 @@ public class TopDownShooterOpenGL {
             float centerX = width / 2f;
             float centerY = height / 2f;
 
-            glUseProgram(program);          // shader beállítás dobozokhoz
-            glBindVertexArray(vao);
 
             for (int i = 0; i < 3; i++) {
                 float x = centerX + (i - 1) * (boxW + gap);
