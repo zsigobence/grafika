@@ -51,6 +51,12 @@ public class TopDownShooterOpenGL {
     private List<Enemy> enemies = new ArrayList<>();
     private List<XPOrb> xpOrbs = new ArrayList<>(); // XP orbok listája
     private List<FloatingText> floatingTexts = new ArrayList<>(); // lebegő feliratok
+    
+    private boolean levelUpMenuActive = false;
+    private List<Gadget> availableGadgets = new ArrayList<>(); // Szintlépéskor felkínált gadgetek
+
+    // Gadget lista
+    private List<Gadget> gadgets = new ArrayList<>();
 
     private double lastTime;
     private boolean keyUp, keyDown, keyLeft, keyRight, keyShoot;
@@ -60,8 +66,7 @@ public class TopDownShooterOpenGL {
 
     // Kamera offsetok (render során frissítve)
     private float camLeft = 0, camTop = 0;
-    
-    private boolean levelUpMenuActive = false;
+
     
     public static void main(String[] args) {
         System.out.println("Program elindult");
@@ -174,6 +179,9 @@ public class TopDownShooterOpenGL {
         // Text program és font init
         textProgram = createTextProgram();
         initFont();
+        
+        // Gadgetek inicializálása
+        initGadgets();
 
         // Text VAO/VBO egyszer létrehozva
         textVAO = glGenVertexArrays();
@@ -186,6 +194,8 @@ public class TopDownShooterOpenGL {
         glEnableVertexAttribArray(1);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
+        
+
 
         System.out.println("Inicializálás kész");
     }
@@ -379,6 +389,7 @@ public class TopDownShooterOpenGL {
                     xpToNext = calcXpForLevel(level);
                     floatingTexts.add(new FloatingText(player.x, player.y - player.size - 20, "Level Up!", 1.6f, -70.0f, 1.0f, 0.8f, 0.0f));
                     levelUpMenuActive = true;   // szintlépéskor menü aktiválódik
+                    generateLevelUpOptions();
                 }
 
                 xpIter.remove();
@@ -526,37 +537,12 @@ public class TopDownShooterOpenGL {
 
         glBindVertexArray(0);
         
+     // Gadgetek megjelenítése (bal alsó sarok)
+        renderGadgetsInfo();
+
+        // Level up menu
         if (levelUpMenuActive) {
-            float boxW = 160, boxH = 220;
-            float gap = 40;
-            float centerX = width / 2f;
-            float centerY = height / 2f;
-
-
-            for (int i = 0; i < 3; i++) {
-                float x = centerX + (i - 1) * (boxW + gap);
-                float y = centerY;
-
-                glUseProgram(program);        
-                glBindVertexArray(vao);       
-
-                glUniformMatrix4fv(uniModel, false, createModelMatrix(x, y, boxW, boxH));
-                glUniform4f(uniColor, 0.2f, 0.6f, 1.0f, 1.0f); // kék
-                glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-
-                glBindVertexArray(0);         // VAO unbind
-
-                // Szöveg középre a dobozban
-                String optionText = "Option " + (i + 1);
-                float textScale = 1.0f;
-                float approxCharWidth2 = 10f;
-                float textWidth = optionText.length() * approxCharWidth2 * textScale;
-                float textX = x - textWidth / 2f;
-                float textY = y - 80f;
-                renderText(optionText, textX, textY, textScale, 1f, 1f, 1f, 1f);
-            }
-
-            glBindVertexArray(0);
+            renderLevelUpMenu();
         }
 
 
@@ -572,6 +558,25 @@ public class TopDownShooterOpenGL {
                 float alpha = Math.max(0f, Math.min(1f, ft.life / ft.initialLife));
                 renderText(ft.text, screenX, screenY, 1.0f, ft.r, ft.g, ft.b, alpha);
             }
+        }
+    }
+    
+    private void generateLevelUpOptions() {
+        availableGadgets.clear();
+        
+        // Összegyűjtjük a nem maximális szintű gadgeteket
+        List<Gadget> nonMaxGadgets = new ArrayList<>();
+        for (Gadget gadget : gadgets) {
+            if (gadget.level < gadget.maxLevel) {
+                nonMaxGadgets.add(gadget);
+            }
+        }
+        
+        // Véletlenszerűen kiválasztunk 3-at (vagy amennyi van, ha kevesebb)
+        Collections.shuffle(nonMaxGadgets);
+        int count = Math.min(3, nonMaxGadgets.size());
+        for (int i = 0; i < count; i++) {
+            availableGadgets.add(nonMaxGadgets.get(i));
         }
     }
 
@@ -629,21 +634,133 @@ public class TopDownShooterOpenGL {
     
     private void handleMouseClick(float mouseX, float mouseY) {
         if (levelUpMenuActive) {
-            float boxW = 120, boxH = 120;
-            float gap = 40;
+            float boxW = 220f, boxH = 120f;
+            float gap = 20f;
             float centerX = width / 2f;
-            float centerY = height / 2f;
+            float startY = height / 2f - 50f;
 
-            for (int i = 0; i < 3; i++) {
-                float x = centerX + (i - 1) * (boxW + gap) - boxW / 2f;
-                float y = centerY - boxH / 2f;
-                if (mouseX >= x && mouseX <= x + boxW &&
-                    mouseY >= y && mouseY <= y + boxH) {
-                    // Kiválasztottunk egy opciót → játék folytatódik
+            for (int i = 0; i < availableGadgets.size(); i++) {
+                Gadget gadget = availableGadgets.get(i);
+                float x = centerX + (i - (availableGadgets.size()-1)/2f) * (boxW + gap);
+                float y = startY;
+                
+                float left = x - boxW/2f;
+                float right = x + boxW/2f;
+                float top = y - boxH/2f;
+                float bottom = y + boxH/2f;
+                
+                if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
+                    // Gadget szintjének növelése
+                    gadget.levelUp();
                     levelUpMenuActive = false;
+                    
+                    // Vizuális visszajelzés
+                    floatingTexts.add(new FloatingText(player.x, player.y, gadget.name + " +1", 1.5f, -50f, 0f, 1f, 0f));
                     break;
                 }
             }
+        }
+    }
+    private void renderGadgetsInfo() {
+        float startX = 20f;
+        float startY = height - 100f;
+        float lineHeight = 15f;
+        
+        renderText("Gadgets:", startX, startY, 0.8f, 1f, 1f, 1f, 1f);
+        
+        for (int i = 0; i < gadgets.size(); i++) {
+            Gadget g = gadgets.get(i);
+            if (g.level > 0) {
+                String text = g.name + ": " + g.level + "/" + g.maxLevel;
+                renderText(text, startX, startY + (i + 1) * lineHeight, 0.7f, 0.8f, 0.8f, 0.8f, 1f);
+            }
+        }
+    }
+
+    private void renderLevelUpMenu() {
+        // Sötét háttér
+        glUseProgram(program);
+        glUniformMatrix4fv(uniProjection, false, ortho(0, width, height, 0, -1.0f, 1.0f));
+        glBindVertexArray(vao);
+        
+        // Átlátszó fekete háttér
+        glUniformMatrix4fv(uniModel, false, createModelMatrix(width/2f, height/2f, width, height));
+        glUniform4f(uniColor, 0f, 0f, 0f, 0.7f);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        
+        // Cím
+        renderText("LEVEL UP! Choose a gadget:", width/2f - getTextWidth("LEVEL UP! Choose a gadget:", 1.2f)/2f, 60f, 1.2f, 1f, 1f, 0f, 1f);
+        
+     // Gadget opciók
+        float boxW = 220f, boxH = 280f;
+        float gap = 20f;
+        float centerX = width / 2f;
+        float startY = height / 2f;
+
+        for (int i = 0; i < availableGadgets.size(); i++) {
+            Gadget gadget = availableGadgets.get(i);
+            float x = centerX + (i - (availableGadgets.size()-1)/2f) * (boxW + gap);
+            float y = startY;
+            
+            glUseProgram(program);        
+            glBindVertexArray(vao);   
+
+            // Doboz
+            glUniformMatrix4fv(uniModel, false, createModelMatrix(x, y, boxW, boxH));
+            glUniform4f(uniColor, 0.2f, 0.4f, 0.8f, 1.0f);
+            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+            
+            // Gadget információk - középre igazítva
+            String levelText = "(" + gadget.level + "/" + gadget.maxLevel + ")";
+            
+            // Név középre igazítása
+            float nameWidth = getTextWidth(gadget.name, 0.9f);
+            float nameX = x - nameWidth / 2f;
+            renderText(gadget.name, nameX, y - (boxH/2f) - 20f, 0.9f, 1f, 1f, 1f, 1f);
+            
+            // Szint információ középre igazítása
+            float levelWidth = getTextWidth(levelText, 0.8f);
+            float levelX = x - levelWidth / 2f;
+            renderText(levelText, levelX, y - boxH/2f + 100f, 0.8f, 1f, 1f, 1f, 1f);
+            
+            // Következő szint hatása
+            if (gadget.level < gadget.maxLevel) {
+                String effect = getNextLevelEffect(gadget);
+                float effectWidth = getTextWidth(effect, 0.7f);
+                float effectX = x - effectWidth / 2f;
+                renderText(effect, effectX, y - boxH/2f + 80f, 0.7f, 0f, 1f, 0f, 1f);
+            } 
+        }
+
+        glBindVertexArray(0);
+    }
+    
+    private float getTextWidth(String text, float scale) {
+        return text.length() * 10f * scale; 
+    }
+
+    private String getNextLevelEffect(Gadget gadget) {
+        switch (gadget.name) {
+            case "Orbit Blade":
+                return "Blades: " + (3 + gadget.level) + " -> " + (3 + gadget.level + 1);
+            case "Attack Speed":
+                return "Speed: +" + (gadget.level * 20) + "% -> +" + ((gadget.level + 1) * 20) + "%";
+            case "Life Steal":
+                return "500 point = +1 HP";
+            case "Attack Damage":
+                return "Damage: +" + gadget.level + " -> +" + (gadget.level + 1);
+            case "Max HP":
+                return "Max HP: +" + gadget.level + " -> +" + (gadget.level + 1);
+            case "Movement Speed":
+                return "Speed: +" + (gadget.level * 10) + "% -> +" + ((gadget.level + 1) * 10) + "%";
+            case "Multi Attack":
+                int currentDirs = gadget.level == 0 ? 1 : (gadget.level == 1 ? 2 : 4);
+                int nextDirs = gadget.level == 0 ? 2 : (gadget.level == 1 ? 4 : 4);
+                return "Directions: " + currentDirs + " -> " + nextDirs;
+            case "Laser":
+                return "Cooldown: " + (10 - gadget.level) + "s -> " + (9 - gadget.level) + "s";
+            default:
+                return "Upgrade";
         }
     }
 
@@ -735,6 +852,17 @@ public class TopDownShooterOpenGL {
         memFree(bitmap);
         memFree(ttfBuffer);
     }
+    
+    private void initGadgets() {
+        gadgets.add(new Gadget("Orbit Blade", 0, 3));
+        gadgets.add(new Gadget("Attack Speed", 0, 5));
+        gadgets.add(new Gadget("Life Steal", 0, 1));
+        gadgets.add(new Gadget("Attack Damage", 0, 5));
+        gadgets.add(new Gadget("Max HP", 0, 5));
+        gadgets.add(new Gadget("Movement Speed", 0, 5));
+        gadgets.add(new Gadget("Multi Attack", 0, 3));
+        gadgets.add(new Gadget("Laser", 0, 3));
+    }
 
     /**
      * Render text (új szignatúra: tetszőleges RGBA szín)
@@ -752,8 +880,8 @@ public class TopDownShooterOpenGL {
 
         glBindVertexArray(textVAO);
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            FloatBuffer xBuf = stack.floats(x);
-            FloatBuffer yBuf = stack.floats(y);
+            FloatBuffer xBuf = stack.floats(x / scale);
+            FloatBuffer yBuf = stack.floats(y / scale);
 
             for (int i = 0; i < text.length(); i++) {
                 char c = text.charAt(i);
@@ -952,4 +1080,24 @@ public class TopDownShooterOpenGL {
 
     }
 
+    
+ // Gadget osztály
+    private static class Gadget {
+        String name;
+        int level;
+        int maxLevel;
+        
+        Gadget(String name, int level, int maxLevel) {
+            this.name = name;
+            this.level = level;
+            this.maxLevel = maxLevel;
+        }
+        
+        void levelUp() {
+            if (level < maxLevel) {
+                level++;
+            }
+        }
+    }
+    
 }
