@@ -201,7 +201,9 @@ public class TopDownShooterOpenGL {
         SoundManager.loadSound("shoot", "src/main/sounds/shoot.ogg");
         SoundManager.setVolume("shoot", 0.1f);
         SoundManager.loadSound("xp", "src/main/sounds/xp.ogg");
+        SoundManager.setVolume("xp", 0.4f);
         SoundManager.loadSound("levelup", "src/main/sounds/levelup.ogg");
+        SoundManager.setVolume("levelup", 0.5f);
         SoundManager.loadSound("bgm", "src/main/sounds/bgm.ogg");
         SoundManager.setVolume("bgm", 1.0f);
         SoundManager.loop("bgm");

@@ -25,13 +25,11 @@ public class SoundManager {
 
     // Inicializálás
     public static void init() {
-        // alapértelmezett hang eszköz
         device = ALC10.alcOpenDevice((CharSequence) null);
         if (device == NULL) {
             throw new IllegalStateException("Nem sikerült megnyitni az alapértelmezett hang eszközt!");
         }
 
-        // kontextus
         context = ALC10.alcCreateContext(device, new int[]{0});
         if (context == NULL) {
             throw new IllegalStateException("Nem sikerült létrehozni az OpenAL kontextust!");
@@ -43,7 +41,7 @@ public class SoundManager {
         System.out.println("✅ OpenAL inicializálva");
     }
 
-    // Hang betöltése (.ogg ajánlott)
+    // Hang betöltése (.ogg)
     public static void loadSound(String name, String path) {
         if (!Files.exists(Paths.get(path))) {
             throw new RuntimeException("Hangfájl nem található: " + path);
@@ -61,7 +59,7 @@ public class SoundManager {
             int channels = channelsBuffer.get(0);
             int sampleRate = sampleRateBuffer.get(0);
 
-            int format = -1;
+            int format;
             if (channels == 1) {
                 format = AL10.AL_FORMAT_MONO16;
             } else if (channels == 2) {
@@ -71,35 +69,44 @@ public class SoundManager {
             }
 
             int buffer = AL10.alGenBuffers();
+            checkError("alGenBuffers");
             AL10.alBufferData(buffer, format, rawAudio, sampleRate);
+            checkError("alBufferData");
 
             int source = AL10.alGenSources();
+            checkError("alGenSources");
             AL10.alSourcei(source, AL10.AL_BUFFER, buffer);
+            checkError("alSourcei (buffer bind)");
 
             buffers.put(name, buffer);
             sources.put(name, source);
 
-            System.out.println("🎵 Betöltve: " + name + " (" + path + ")");
-        }
-    }
-    
-    public static void setVolume(String name, float volume) {
-        Integer source = sources.get(name);
-        if (source != null) {
-            // hangerő beállítása 0.0f – 1.0f között
-            volume = Math.max(0.0f, Math.min(1.0f, volume));
-            AL10.alSourcef(source, AL10.AL_GAIN, volume);
+            System.out.println("🎵 Betöltve: " + name + " (" + path + 
+                               ") | Buffer ID=" + buffer + " Source ID=" + source);
         }
     }
 
+    public static void setVolume(String name, float volume) {
+        Integer source = sources.get(name);
+        if (source != null) {
+            volume = Math.max(0.0f, Math.min(1.0f, volume));
+            AL10.alSourcef(source, AL10.AL_GAIN, volume);
+            checkError("alSourcef (gain)");
+        }
+    }
 
     // Lejátszás
     public static void play(String name) {
         Integer source = sources.get(name);
         if (source != null) {
+            System.out.println("▶️ play('" + name + "') Source=" + source);
             AL10.alSourceStop(source);
             AL10.alSourcei(source, AL10.AL_LOOPING, AL10.AL_FALSE);
+            checkError("alSourcei (looping=false)");
             AL10.alSourcePlay(source);
+            checkError("alSourcePlay");
+        } else {
+            System.out.println("❌ play('" + name + "') - nincs forrás!");
         }
     }
 
@@ -107,8 +114,11 @@ public class SoundManager {
     public static void loop(String name) {
         Integer source = sources.get(name);
         if (source != null) {
+            System.out.println("🔁 loop('" + name + "') Source=" + source);
             AL10.alSourcei(source, AL10.AL_LOOPING, AL10.AL_TRUE);
+            checkError("alSourcei (looping=true)");
             AL10.alSourcePlay(source);
+            checkError("alSourcePlay (loop)");
         }
     }
 
@@ -116,7 +126,9 @@ public class SoundManager {
     public static void stop(String name) {
         Integer source = sources.get(name);
         if (source != null) {
+            System.out.println("⏹ stop('" + name + "') Source=" + source);
             AL10.alSourceStop(source);
+            checkError("alSourceStop");
         }
     }
 
@@ -124,11 +136,21 @@ public class SoundManager {
     public static void cleanup() {
         for (int source : sources.values()) {
             AL10.alDeleteSources(source);
+            checkError("alDeleteSources");
         }
         for (int buffer : buffers.values()) {
             AL10.alDeleteBuffers(buffer);
+            checkError("alDeleteBuffers");
         }
         ALC10.alcDestroyContext(context);
         ALC10.alcCloseDevice(device);
+    }
+
+    // --- Segéd függvény hibákhoz ---
+    private static void checkError(String msg) {
+        int err = AL10.alGetError();
+        if (err != AL10.AL_NO_ERROR) {
+            System.out.println("⚠️ OpenAL hiba (" + msg + "): " + err);
+        }
     }
 }
