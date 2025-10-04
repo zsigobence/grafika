@@ -1,4 +1,5 @@
-package grafika_beadando;
+package main.java;
+
 
 import org.lwjgl.*;
 import org.lwjgl.glfw.*;
@@ -7,9 +8,9 @@ import org.lwjgl.stb.STBTTAlignedQuad;
 import org.lwjgl.stb.STBTTBakedChar;
 import org.lwjgl.system.*;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.*;
 
 import static org.lwjgl.glfw.GLFW.*;
@@ -85,6 +86,7 @@ public class TopDownShooterOpenGL {
     }
 
     private void init() throws Exception {
+    	SoundManager.init();
         System.out.println("Inicializálás...");
 
         if (!glfwInit()) throw new IllegalStateException("Nem sikerült inicializálni a GLFW-t");
@@ -195,7 +197,14 @@ public class TopDownShooterOpenGL {
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
         
-
+        
+        SoundManager.loadSound("shoot", "src/main/sounds/shoot.ogg");
+        SoundManager.setVolume("shoot", 0.1f);
+        SoundManager.loadSound("xp", "src/main/sounds/xp.ogg");
+        SoundManager.loadSound("levelup", "src/main/sounds/levelup.ogg");
+        SoundManager.loadSound("bgm", "src/main/sounds/bgm.ogg");
+        SoundManager.setVolume("bgm", 1.0f);
+        SoundManager.loop("bgm");
 
         System.out.println("Inicializálás kész");
     }
@@ -262,6 +271,7 @@ public class TopDownShooterOpenGL {
 	                     if (len == 0) len = 1.0f;
 	                     float bSpeed = 700.0f;
 	                     bullets.add(new Bullet(player.x, player.y, dx/len * bSpeed, dy/len * bSpeed));
+	                     SoundManager.play("shoot");
 	                 }
 	             }
 	         }
@@ -381,7 +391,8 @@ public class TopDownShooterOpenGL {
 
                 // lebegő felirat pickupról
                 floatingTexts.add(new FloatingText(player.x, player.y - player.size, (orb.value >= 10 ? "+10" : "+5"), 1.2f, -40.0f, 1.0f, 1.0f, 0.2f));
-
+                SoundManager.play("xp");
+                
                 // szintellenőrzés és esetleges szintlépés
                 if (xp >= xpToNext) {
                     xp -= xpToNext;
@@ -389,6 +400,7 @@ public class TopDownShooterOpenGL {
                     xpToNext = calcXpForLevel(level);
                     floatingTexts.add(new FloatingText(player.x, player.y - player.size - 20, "Level Up!", 1.6f, -70.0f, 1.0f, 0.8f, 0.0f));
                     levelUpMenuActive = true;   // szintlépéskor menü aktiválódik
+                    SoundManager.play("levelup");
                     generateLevelUpOptions();
                 }
 
@@ -834,8 +846,14 @@ public class TopDownShooterOpenGL {
     }
 
     private void initFont() throws Exception {
-        byte[] ttf = Files.readAllBytes(Paths.get("C:\\Users\\Zsigó Bence\\eclipse-workspace\\grafika_beadando\\src\\grafika_beadando\\arial.ttf"));
-        ByteBuffer ttfBuffer = memAlloc(ttf.length).put(ttf).flip();
+    	try (InputStream in = getClass().getResourceAsStream("/fonts/arial.ttf")) {
+    	    if (in == null) {
+    	        throw new IOException("Font file not found!");
+    	    }
+    	    byte[] fontBytes = in.readAllBytes();
+    	    ByteBuffer ttfBuffer = BufferUtils.createByteBuffer(fontBytes.length);
+    	    ttfBuffer.put(fontBytes);
+    	    ttfBuffer.flip();
 
         int bitmapW = 512, bitmapH = 512;
         ByteBuffer bitmap = memAlloc(bitmapW * bitmapH);
@@ -851,6 +869,7 @@ public class TopDownShooterOpenGL {
 
         memFree(bitmap);
         memFree(ttfBuffer);
+    	}
     }
     
     private void initGadgets() {
