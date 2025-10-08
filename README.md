@@ -28,9 +28,7 @@
 
     -   Jobb felső sarokban idő számláló
 
-    **TextureManager osztály létrehozva a textúrák betöltéséhez**
 
-    -   Jobb felső sarokban idő számláló
 
 
 ## További feladatok 
