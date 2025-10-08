@@ -30,6 +30,8 @@
 
 
 
+    **Kód szétdarabolása külön osztáylokba, mert már nem volt átlátható az 1500sor(majdnem belerokkantam)**
+
 
 ## További feladatok 
 
