@@ -1,7 +1,6 @@
 package main.java;
 
 
-import org.lwjgl.*;
 import org.lwjgl.glfw.*;
 import org.lwjgl.opengl.*;
 import org.lwjgl.stb.STBTTAlignedQuad;
@@ -43,9 +42,9 @@ public class TopDownShooterOpenGL {
     private int score = 0;
 
     // XP + szintelés
-    private int xp = 99;
+    private int xp = 0;
     private int level = 1;
-    private int xpToNext = 100;
+    private int xpToNext = 50;
 
     private Player player;
     private List<Bullet> bullets = new ArrayList<>();
@@ -58,12 +57,21 @@ public class TopDownShooterOpenGL {
 
     // Gadget lista
     private List<Gadget> gadgets = new ArrayList<>();
+    
+ // a többi private mező mellé add hozzá
+    private GadgetSystem gadgetSystem;
+
+
 
     private double lastTime;
-    private boolean keyUp, keyDown, keyLeft, keyRight, keyShoot;
+    private boolean keyUp, keyDown, keyLeft, keyRight;
 
-    private double enemySpawnTimer = 0.0;
-    private double enemySpawnInterval = 0.9; // mp
+ // idő + spawn vezérlés
+    private double elapsedTime = 0.0;           // eltelt idő másodpercben
+    private double enemySpawnTimer = 0.0;       // meglévő timer
+    private float baseEnemySpawnInterval = 0.9f; // kezdeti (alap) spawn intervallum
+    private float enemySpawnInterval = baseEnemySpawnInterval; // aktív intervallum (frissül percenként)
+
 
     // Kamera offsetok (render során frissítve)
     private float camLeft = 0, camTop = 0;
@@ -184,6 +192,10 @@ public class TopDownShooterOpenGL {
         
         // Gadgetek inicializálása
         initGadgets();
+        // init() végén, initGadgets() után:
+        recomputePlayerStats();
+        gadgetSystem = new GadgetSystem();
+
 
         // Text VAO/VBO egyszer létrehozva
         textVAO = glGenVertexArrays();
@@ -196,17 +208,26 @@ public class TopDownShooterOpenGL {
         glEnableVertexAttribArray(1);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
-        
+       
+
+
         
         SoundManager.loadSound("shoot", "src/main/sounds/shoot.ogg");
-        SoundManager.setVolume("shoot", 0.1f);
+        SoundManager.setVolume("shoot", 0.3f);
         SoundManager.loadSound("xp", "src/main/sounds/xp.ogg");
         SoundManager.setVolume("xp", 0.4f);
+        SoundManager.loadSound("damage", "src/main/sounds/damage.ogg");
+        SoundManager.setVolume("damage", 0.4f);
+        SoundManager.loadSound("laser", "src/main/sounds/laser.ogg");
+        SoundManager.setVolume("laser", 0.4f);
+        SoundManager.loadSound("flying-blade", "src/main/sounds/flying-blade.ogg");
+        SoundManager.setVolume("flying-blade", 0.4f);
         SoundManager.loadSound("levelup", "src/main/sounds/levelup.ogg");
         SoundManager.setVolume("levelup", 0.5f);
         SoundManager.loadSound("bgm", "src/main/sounds/bgm.ogg");
         SoundManager.setVolume("bgm", 1.0f);
         SoundManager.loop("bgm");
+
 
         System.out.println("Inicializálás kész");
     }
@@ -226,9 +247,13 @@ public class TopDownShooterOpenGL {
     }
 
     private void update(float deltaTime) {
+    	
     	if (levelUpMenuActive) {
     	    return; // játék megáll, amíg választás nem történik
     	}
+    	// frissítjük az összesített eltelt időt
+    	elapsedTime += deltaTime;
+    	
         float moveX = 0, moveY = 0;
         if (keyUp) moveY -= 1;
         if (keyDown) moveY += 1;
@@ -248,43 +273,36 @@ public class TopDownShooterOpenGL {
         player.x = Math.max(player.size / 2, Math.min(worldWidth - player.size / 2, player.x));
         player.y = Math.max(player.size / 2, Math.min(worldHeight - player.size / 2, player.y));
 
-        // Autolövés: lő a legközelebbi ellenség felé
-        float autoShootRange = 500.0f; // módosítsd szükség szerint
 
-	     // --- Módosított rész az update()-ben: csak akkor lő auto ellenségre, ha az a megadott távolságon belül van ---
-	     player.shootCooldown -= deltaTime;
-	     if (player.shootCooldown <= 0) {
-	         if (!enemies.isEmpty()) {
-	             Enemy nearest = null;
-	             float bestDistSq = Float.MAX_VALUE;
-	             for (Enemy e : enemies) {
-	                 float dx = e.x - player.x;
-	                 float dy = e.y - player.y;
-	                 float d2 = dx * dx + dy * dy;
-	                 if (d2 < bestDistSq) { bestDistSq = d2; nearest = e; }
-	             }
-	             if (nearest != null) {
-	                 float dist = (float)Math.sqrt(bestDistSq);
-	                 // csak akkor lőjünk, ha a legközelebbi ellenség a megadott tartományon belül van
-	                 if (dist <= autoShootRange) {
-	                     float dx = nearest.x - player.x;
-	                     float dy = nearest.y - player.y;
-	                     float len = (float)Math.sqrt(dx*dx + dy*dy);
-	                     if (len == 0) len = 1.0f;
-	                     float bSpeed = 700.0f;
-	                     bullets.add(new Bullet(player.x, player.y, dx/len * bSpeed, dy/len * bSpeed));
-	                     SoundManager.play("shoot");
-	                 }
-	             }
-	         }
-	         player.shootCooldown = 0.1f;
-	        }
 
-        // Space manuális lövés
-        if (keyShoot && player.shootCooldown <= 0) {
-            bullets.add(new Bullet(player.x, player.y, 0.0f, -400.0f));
-            player.shootCooldown = 0.2f;
+        player.shootCooldown -= deltaTime;
+        if (player.shootCooldown <= 0) {
+            if (!enemies.isEmpty()) {
+                Enemy nearest = null;
+                float bestDistSq = Float.MAX_VALUE;
+                for (Enemy e : enemies) {
+                    float dx = e.x - player.x;
+                    float dy = e.y - player.y;
+                    float d2 = dx * dx + dy * dy;
+                    if (d2 < bestDistSq) { bestDistSq = d2; nearest = e; }
+                }
+                if (nearest != null) {
+                    float dist = (float)Math.sqrt(bestDistSq);
+                    if (dist <= 500.0f) { // auto shoot range
+                        float dx = nearest.x - player.x;
+                        float dy = nearest.y - player.y;
+                        float len = (float)Math.sqrt(dx*dx + dy*dy);
+                        if (len == 0) len = 1.0f;
+                        float bSpeed = 700.0f;
+                        spawnPlayerBullets(player.x, player.y, dx/len, dy/len, bSpeed);
+                        SoundManager.play("shoot");
+                    }
+                }
+            }
+            // beállítjuk a cooldown-t Attack Speed alapján
+            player.shootCooldown = 0.75f * getAttackSpeedMultiplier();
         }
+
 
         // Lövedékek frissítése
         bullets.removeIf(b -> {
@@ -293,7 +311,16 @@ public class TopDownShooterOpenGL {
         });
 
         // Ellenségek spawnolása
+     // percben és 3-perces lépésekben számolt nehézség
+        int minutesElapsed = (int)(elapsedTime / 60.0);
+        int difficultyStages = minutesElapsed / 3; // minden 3. perc után egy stage
+
+        // spawn interval csökken percenként (kis mértékben). Clampeljük minimum értékre.
+        float spawnMultiplier = Math.max(0.25f, 1.0f - 0.15f * minutesElapsed); // percenként ~7% gyorsulás, legfeljebb 75% gyorsulás
+        enemySpawnInterval = baseEnemySpawnInterval * spawnMultiplier;
         enemySpawnTimer += deltaTime;
+        // nehézség szorzó (HP és sebesség növelésére minden 3. perc után)
+        float difficultyMultiplier = 1.0f + 0.15f * difficultyStages; // minden stage +15% erő
         float spawnRadius = Math.max(width, height) * 0.8f + 200.0f;
         if (enemySpawnTimer > enemySpawnInterval) {
             enemySpawnTimer = 0.0;
@@ -325,7 +352,13 @@ public class TopDownShooterOpenGL {
             float vx = dirX / len * baseSpeed;
             float vy = dirY / len * baseSpeed;
 
-            enemies.add(new Enemy(ex, ey, vx, vy, type));
+            Enemy spawned = new Enemy(ex, ey, vx, vy, type);
+
+            spawned.maxHp = Math.max(1, Math.round(spawned.maxHp * difficultyMultiplier));
+            spawned.hp = spawned.maxHp;
+
+            enemies.add(spawned);
+
         }
 
         // Ellenségek frissítése és ütközések
@@ -338,22 +371,44 @@ public class TopDownShooterOpenGL {
             while (bulletIter.hasNext()) {
                 Bullet b = bulletIter.next();
                 if (checkCollision(enemy, b)) {
-                    bulletIter.remove();
-                    enemy.hp -= player.damage; // játékos sebzését vonjuk le
+                    if (b instanceof LaserBullet) {
+                        LaserBullet lb = (LaserBullet) b;
+                        lb.onHit(enemy); // sebzés és pierce csökkentés
+                        if (lb.pierce <= 0) bulletIter.remove();
+                    } else {
+                        // normál lövedék: sebzés a játékos damage alapján, és lövedék eltávolítása
+                        enemy.hp -= player.damage;
+                        SoundManager.playOverlap("damage");
+                        bulletIter.remove();
+                    }
+
                     if (enemy.isDead()) {
-                        int xpValue = (enemy.type == EnemyType.BASIC) ? 5 : 10;
-                        xpOrbs.add(new XPOrb(enemy.x, enemy.y, xpValue, enemy.type));
+                        xpOrbs.add(new XPOrb(enemy.x, enemy.y, enemy.getXp()));
                         enemyIterator.remove();
                         score += enemy.type == EnemyType.TANK ? 30 : 10;
+
+                        // Life Steal: ha van Life Steal szint, gyógyítunk öléskor
+                        int ls = getGadgetLevel("Life Steal");
+                        if (ls > 0) {
+                            float chance = ls * 0.03f; // 3% per szint
+                            if (Math.random() < chance) {
+                                player.hp = Math.min(player.maxHp, player.hp + 1);
+                                floatingTexts.add(new FloatingText(
+                                    player.x, player.y - 40,
+                                    "+HP", 1.0f, -40f,
+                                    0.3f, 1f, 0.3f
+                                ));
+                            }
+                        }
                     }
                     break;
                 }
             }
 
+
             if (checkCollision(enemy, player)) {
                 player.hp--; // ellenség sebzi a játékost
-                int xpValue = (enemy.type == EnemyType.BASIC) ? 5 : 10;
-                xpOrbs.add(new XPOrb(enemy.x, enemy.y, xpValue, enemy.type));
+                xpOrbs.add(new XPOrb(enemy.x, enemy.y, enemy.getXp())); 
                 enemyIterator.remove();
                 if (player.isDead()) {
                     System.out.println("Game Over!");
@@ -392,7 +447,7 @@ public class TopDownShooterOpenGL {
                 xp += orb.value;
 
                 // lebegő felirat pickupról
-                floatingTexts.add(new FloatingText(player.x, player.y - player.size, (orb.value >= 10 ? "+10" : "+5"), 1.2f, -40.0f, 1.0f, 1.0f, 0.2f));
+                floatingTexts.add(new FloatingText(player.x, player.y - player.size, "+" + orb.value, 1.2f, -40.0f, 1.0f, 1.0f, 0.2f));
                 SoundManager.play("xp");
                 
                 // szintellenőrzés és esetleges szintlépés
@@ -409,6 +464,12 @@ public class TopDownShooterOpenGL {
                 xpIter.remove();
             }
         }
+        
+
+        if (!levelUpMenuActive) {
+            gadgetSystem.update(deltaTime);
+        }
+
 
         // FloatingText frissítése (világ koordinátákban)
         Iterator<FloatingText> ftIt = floatingTexts.iterator();
@@ -457,13 +518,20 @@ public class TopDownShooterOpenGL {
         glUniform4f(uniColor, 0.2f, 0.9f, 0.2f, 1.0f);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         renderHealthBar(player);
+        
 
-        // Lövedékek
+
+        // Lövedékek 
         for (Bullet b : bullets) {
+            if (b instanceof LaserBullet) continue; // Laser-okat a GadgetSystem rendeli
             glUniformMatrix4fv(uniModel, false, createModelMatrix(b.x, b.y, b.size, b.size));
             glUniform4f(uniColor, 1.0f, 0.9f, 0.2f, 1.0f);
             glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         }
+
+
+
+
 
         // Ellenségek
         for (Enemy enemy : enemies) {
@@ -479,21 +547,17 @@ public class TopDownShooterOpenGL {
 
         // XP Orbs kirajzolása (típusonként más méret / fényerő)
         for (XPOrb orb : xpOrbs) {
-            float size = orb.size;
+            float size = 15f - (15f - orb.value / 2);
             float r = 1.0f, g = 1.0f, b = 0.2f;
-            if (orb.type == EnemyType.BASIC) {
-                size = 8.0f;
-                r = 1.0f; g = 1.0f; b = 0.45f;
-            } else {
-                size = 12.0f;
-                r = 1.0f; g = 1.0f; b = 0.12f;
-            }
+            r = 1.0f; g = 1.0f; b = 0.45f;
             float pulse = 1.0f + 0.08f * (float)Math.sin(glfwGetTime() * 8.0 + orb.hashCode() % 10);
             glUniformMatrix4fv(uniModel, false, createModelMatrix(orb.x, orb.y, size * pulse, size * pulse));
             glUniform4f(uniColor, r, g, b, 1.0f);
             glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         }
-
+        
+        // GadgetSystem render (orbit blade + LaserBullet vizualok)
+        if (gadgetSystem != null) gadgetSystem.render();
         glBindVertexArray(0);
 
         // --- HUD render (XP sáv + Score + szint) ---
@@ -504,6 +568,16 @@ public class TopDownShooterOpenGL {
         // Score (szöveg)
         renderText("Score: " + score, 20, 40, 1.0f, 1f,1f,1f,1f);
         
+        // Idő formázása mm:ss
+        int totalSeconds = (int) Math.floor(elapsedTime);
+        int mins = totalSeconds / 60;
+        int secs = totalSeconds % 60;
+        String timeStr = String.format("%02d:%02d", mins, secs);
+
+        // egyszerű approx szélesség (használhatod a getTextWidth-et is pontosításhoz)
+        float textW = getTextWidth(timeStr, 1.0f);
+        renderText(timeStr, width - 20 - textW, 40, 1.0f, 1f, 1f, 1f, 1f);
+
         
         
         // XP sáv: a bal felső sarok alá
@@ -559,10 +633,6 @@ public class TopDownShooterOpenGL {
             renderLevelUpMenu();
         }
 
-
-
-
-
         // FloatingTexts kirajzolása: világ koordinátában vannak -> konvertáljuk képernyő koordinátára
         glUseProgram(textProgram);
         if (!levelUpMenuActive) {
@@ -595,6 +665,7 @@ public class TopDownShooterOpenGL {
     }
 
     private void cleanup() {
+    	SoundManager.cleanup();
         glDeleteBuffers(ebo);
         glDeleteBuffers(vbo);
         glDeleteVertexArrays(vao);
@@ -613,8 +684,8 @@ public class TopDownShooterOpenGL {
 
     // Számolja a következő szint XP küszöbét (növekvő)
     private int calcXpForLevel(int lvl) {
-        // pl.: 100 * 1.4^(lvl-1)
-        double val = 100.0 * Math.pow(1.4, Math.max(0, lvl - 1));
+        // pl.: 100 * 1.45^(lvl-1)
+        double val = 100.0 * Math.pow(1.45, Math.max(0, lvl - 1));
         return Math.max(20, (int)Math.round(val));
     }
 
@@ -666,12 +737,17 @@ public class TopDownShooterOpenGL {
                 if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
                     // Gadget szintjének növelése
                     gadget.levelUp();
+
+                    // azonnal alkalmazzuk a gadget hatását (újraszámoljuk a játékos statjait)
+                    recomputePlayerStats();
+
                     levelUpMenuActive = false;
-                    
+
                     // Vizuális visszajelzés
                     floatingTexts.add(new FloatingText(player.x, player.y, gadget.name + " +1", 1.5f, -50f, 0f, 1f, 0f));
                     break;
                 }
+
             }
         }
     }
@@ -690,6 +766,66 @@ public class TopDownShooterOpenGL {
             }
         }
     }
+    
+    
+ // lekéri egy gadget jelenlegi szintjét
+    private int getGadgetLevel(String name) {
+        for (Gadget g : gadgets) if (g.name.equals(name)) return g.level;
+        return 0;
+    }
+
+    // újraszámolja a játékos statjait az alapértékek és a gadgetek alapján
+    private void recomputePlayerStats() {
+        player.damage = player.baseDamage + getGadgetLevel("Attack Damage");
+
+        int newMaxHp = player.baseMaxHp + getGadgetLevel("Max HP");
+        if (newMaxHp != player.maxHp) {
+            // megőrizzük az aktuális életerő arányát
+            float percent = (float)player.hp / (float)player.maxHp;
+            player.maxHp = newMaxHp;
+            player.hp = Math.min(player.maxHp, Math.max(1, Math.round(player.maxHp * percent)));
+        }
+
+        player.moveSpeed = player.baseMoveSpeed * (1.0f + 0.1f * getGadgetLevel("Movement Speed"));
+    }
+
+    // attack speed: kisebb multiplier = gyorsabb lövés
+    private float getAttackSpeedMultiplier() {
+        int lvl = getGadgetLevel("Attack Speed");
+        return 1f / (1f + 0.2f * lvl); // lvl 1 => ~0.83x cooldown, lvl2 => ~0.71x...
+    }
+
+
+    // lövedék spawn a játékostól, figyelembe veszi a multiattacket
+    private void spawnPlayerBullets(float px, float py, float dirX, float dirY, float speed) {
+        int count = getGadgetLevel("Multi Attack") + 1;
+        float baseAngle = (float)Math.atan2(dirY, dirX);
+        float spread = (count == 1) ? 0f : (float)Math.toRadians(12f);
+
+        // középső lövedék mindig
+        bullets.add(new Bullet(px, py, (float)Math.cos(baseAngle) * speed, (float)Math.sin(baseAngle) * speed));
+        if (count == 1) return;
+
+        int remaining = count - 1;
+        int pairs = remaining / 2; // hány teljes párt tudunk létrehozni
+
+        // párok + és - irányba
+        for (int j = 1; j <= pairs; j++) {
+            float off = j * spread;
+            float aPos = baseAngle + off;
+            float aNeg = baseAngle - off;
+            bullets.add(new Bullet(px, py, (float)Math.cos(aPos) * speed, (float)Math.sin(aPos) * speed));
+            bullets.add(new Bullet(px, py, (float)Math.cos(aNeg) * speed, (float)Math.sin(aNeg) * speed));
+        }
+
+        // ha marad egy egyenes lövés (például count=2 vagy count=4 esetén), tegyük a + oldalra
+        if (remaining % 2 == 1) {
+            float off = (pairs + 1) * spread;
+            float aExtra = baseAngle + off;
+            bullets.add(new Bullet(px, py, (float)Math.cos(aExtra) * speed, (float)Math.sin(aExtra) * speed));
+        }
+    }
+
 
     private void renderLevelUpMenu() {
         // Sötét háttér
@@ -724,18 +860,14 @@ public class TopDownShooterOpenGL {
             glUniform4f(uniColor, 0.2f, 0.4f, 0.8f, 1.0f);
             glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
             
-            // Gadget információk - középre igazítva
-            String levelText = "(" + gadget.level + "/" + gadget.maxLevel + ")";
+
             
             // Név középre igazítása
             float nameWidth = getTextWidth(gadget.name, 0.9f);
             float nameX = x - nameWidth / 2f;
             renderText(gadget.name, nameX, y - (boxH/2f) - 20f, 0.9f, 1f, 1f, 1f, 1f);
-            
-            // Szint információ középre igazítása
-            float levelWidth = getTextWidth(levelText, 0.8f);
-            float levelX = x - levelWidth / 2f;
-            renderText(levelText, levelX, y - boxH/2f + 100f, 0.8f, 1f, 1f, 1f, 1f);
+           
+
             
             // Következő szint hatása
             if (gadget.level < gadget.maxLevel) {
@@ -743,7 +875,45 @@ public class TopDownShooterOpenGL {
                 float effectWidth = getTextWidth(effect, 0.7f);
                 float effectX = x - effectWidth / 2f;
                 renderText(effect, effectX, y - boxH/2f + 80f, 0.7f, 0f, 1f, 0f, 1f);
-            } 
+            }
+         // --- SZINTEK VIZUALIZÁCIÓJA (kis négyzetek a gadget szintjéhez) ---
+            int max = gadget.maxLevel;
+            int filled = Math.max(0, Math.min(gadget.level, max));
+
+            float squareSize = 16f;
+            float squareGap  = 6f;
+            float totalWidth = max * squareSize + (max - 1) * squareGap;
+            float startSqX   = x - totalWidth / 2f;
+            float sqY = y - 100;
+
+            glUseProgram(program);
+            glBindVertexArray(vao);
+            
+            for (int s = 0; s < max; s++) {
+                float sx = startSqX + s * (squareSize + squareGap);
+                glUniformMatrix4fv(uniModel, false, createModelMatrix(sx + squareSize / 2f, sqY, squareSize, squareSize));
+
+                if (s < filled) {
+                    // már megszerzett szint -> erős sárga
+                    glUniform4f(uniColor, 1.0f, 0.85f, 0.05f, 1.0f);
+                } else if (s == filled && filled < max) {
+                    // a következő szint -> halvány sárga
+                    glUniform4f(uniColor, 1.0f, 0.85f, 0.05f, 0.4f);
+                } else {
+                    // még nem elért -> fekete
+                    glUniform4f(uniColor, 0.05f, 0.05f, 0.05f, 1.0f);
+                }
+
+                glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+            }
+            int texUni = GL20.glGetUniformLocation(program, "tex");
+            int modelUni = GL20.glGetUniformLocation(program, "model");
+            System.out.println("Texture uniform location: " + texUni);
+            System.out.println("Model uniform location: " + modelUni);
+
+
+
+
         }
 
         glBindVertexArray(0);
@@ -756,11 +926,11 @@ public class TopDownShooterOpenGL {
     private String getNextLevelEffect(Gadget gadget) {
         switch (gadget.name) {
             case "Orbit Blade":
-                return "Blades: " + (3 + gadget.level) + " -> " + (3 + gadget.level + 1);
+                return "Blades: " + (gadget.level != 0 ? (2 + gadget.level) + " -> " + (2 + gadget.level + 1) : "3");
             case "Attack Speed":
                 return "Speed: +" + (gadget.level * 20) + "% -> +" + ((gadget.level + 1) * 20) + "%";
             case "Life Steal":
-                return "500 point = +1 HP";
+                return "Chance to lifesteal " + (gadget.level * 3) + "% -> +" + ((gadget.level + 1) * 5 + "%");
             case "Attack Damage":
                 return "Damage: +" + gadget.level + " -> +" + (gadget.level + 1);
             case "Max HP":
@@ -768,11 +938,9 @@ public class TopDownShooterOpenGL {
             case "Movement Speed":
                 return "Speed: +" + (gadget.level * 10) + "% -> +" + ((gadget.level + 1) * 10) + "%";
             case "Multi Attack":
-                int currentDirs = gadget.level == 0 ? 1 : (gadget.level == 1 ? 2 : 4);
-                int nextDirs = gadget.level == 0 ? 2 : (gadget.level == 1 ? 4 : 4);
-                return "Directions: " + currentDirs + " -> " + nextDirs;
+                return "Directions: " + (gadget.level + 1) + " -> " + (gadget.level + 2);
             case "Laser":
-                return "Cooldown: " + (10 - gadget.level) + "s -> " + (9 - gadget.level) + "s";
+                return "Cooldown: " + (gadget.level != 0 ? (9 - gadget.level * 2) + "s -> " + (7 - gadget.level * 2) + "s" : "7" + "s");
             default:
                 return "Upgrade";
         }
@@ -848,42 +1016,56 @@ public class TopDownShooterOpenGL {
     }
 
     private void initFont() throws Exception {
-    	try (InputStream in = getClass().getResourceAsStream("/fonts/arial.ttf")) {
-    	    if (in == null) {
-    	        throw new IOException("Font file not found!");
-    	    }
-    	    byte[] fontBytes = in.readAllBytes();
-    	    ByteBuffer ttfBuffer = BufferUtils.createByteBuffer(fontBytes.length);
-    	    ttfBuffer.put(fontBytes);
-    	    ttfBuffer.flip();
+        try (InputStream in = getClass().getResourceAsStream("/fonts/arial.ttf")) {
+            if (in == null) {
+                throw new IOException("Font file not found!");
+            }
+            byte[] fontBytes = in.readAllBytes();
 
-        int bitmapW = 512, bitmapH = 512;
-        ByteBuffer bitmap = memAlloc(bitmapW * bitmapH);
+            // ALLOCATE THE FONT BYTES WITH memAlloc so we can memFree() later safely
+            ByteBuffer ttfBuffer = MemoryUtil.memAlloc(fontBytes.length);
+            ttfBuffer.put(fontBytes);
+            ttfBuffer.flip();
 
-        cdata = STBTTBakedChar.malloc(96);
-        stbtt_BakeFontBitmap(ttfBuffer, 24, bitmap, bitmapW, bitmapH, 32, cdata);
+            int bitmapW = 512, bitmapH = 512;
+            ByteBuffer bitmap = MemoryUtil.memAlloc(bitmapW * bitmapH);
 
-        fontTexture = glGenTextures();
-        glBindTexture(GL_TEXTURE_2D, fontTexture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, bitmapW, bitmapH, 0, GL_RED, GL_UNSIGNED_BYTE, bitmap);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            cdata = STBTTBakedChar.malloc(96);
+            int rc = stbtt_BakeFontBitmap(ttfBuffer, 24, bitmap, bitmapW, bitmapH, 32, cdata);
+            if (rc <= 0) {
+                // ha valamiért nem sikerül a sütés, dobjunk kivételt (megjegyzés: rc>0 általában OK)
+                MemoryUtil.memFree(bitmap);
+                MemoryUtil.memFree(ttfBuffer);
+                cdata.free();
+                throw new IOException("stbtt_BakeFontBitmap failed (rc=" + rc + ")");
+            }
 
-        memFree(bitmap);
-        memFree(ttfBuffer);
-    	}
+            fontTexture = glGenTextures();
+            glBindTexture(GL_TEXTURE_2D, fontTexture);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, bitmapW, bitmapH, 0, GL_RED, GL_UNSIGNED_BYTE, bitmap);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glBindTexture(GL_TEXTURE_2D, 0);
+
+            // freed the native buffers we allocated
+            MemoryUtil.memFree(bitmap);
+            MemoryUtil.memFree(ttfBuffer);
+        }
     }
+
     
     private void initGadgets() {
-        gadgets.add(new Gadget("Orbit Blade", 0, 3));
+        gadgets.add(new Gadget("Orbit Blade", 0, 5));
         gadgets.add(new Gadget("Attack Speed", 0, 5));
-        gadgets.add(new Gadget("Life Steal", 0, 1));
+        gadgets.add(new Gadget("Life Steal", 0, 3));
         gadgets.add(new Gadget("Attack Damage", 0, 5));
         gadgets.add(new Gadget("Max HP", 0, 5));
         gadgets.add(new Gadget("Movement Speed", 0, 5));
-        gadgets.add(new Gadget("Multi Attack", 0, 3));
-        gadgets.add(new Gadget("Laser", 0, 3));
+        gadgets.add(new Gadget("Multi Attack", 0, 4));
+        gadgets.add(new Gadget("Laser", 0, 5));
     }
+    
+
 
     /**
      * Render text (új szignatúra: tetszőleges RGBA szín)
@@ -970,14 +1152,26 @@ public class TopDownShooterOpenGL {
         float shootCooldown = 0;
         int damage;
         float moveSpeed;
+
+        // újak az alap értékekhez, hogy újraszámolható legyen
+        final int baseDamage;
+        final float baseMoveSpeed;
+        final int baseMaxHp;
+
         Player(float x, float y, int maxHp, int damage, float moveSpeed) {
             super(x, y, 32, maxHp);
+            this.baseMaxHp = maxHp;
             this.maxHp = maxHp;
             this.hp = maxHp;
+
+            this.baseDamage = damage;
             this.damage = damage;
+
+            this.baseMoveSpeed = moveSpeed;
             this.moveSpeed = moveSpeed;
         }
     }
+
 
     private static class Bullet extends Entity {
         float vx, vy;
@@ -994,11 +1188,9 @@ public class TopDownShooterOpenGL {
     // Új: XP orb entitás (tárolja a típust is, hogy vizuálisan különböztessük)
     private static class XPOrb extends Entity {
         int value;
-        EnemyType type;
-        XPOrb(float x, float y, int value, EnemyType type) {
+        XPOrb(float x, float y, int value) {
             super(x, y, 10, 1); // alap méretet rendernél felülírjuk
             this.value = value;
-            this.type = type;
         }
     }
 
@@ -1022,13 +1214,20 @@ public class TopDownShooterOpenGL {
     }
 
     private static class Enemy extends Entity {
-        float vx, vy;
-        EnemyType type;
+        private float vx, vy;
+        private EnemyType type;
+        private int xp;
+        
 
         Enemy(float x, float y, float vx, float vy, EnemyType type) {
             super(x, y, getSize(type), getHp(type));
             this.vx = vx; this.vy = vy; this.type = type;
+            if(type == EnemyType.BASIC) this.xp = 15;
+            if(type == EnemyType.FAST) this.xp = 10;
+            if(type == EnemyType.TANK) this.xp = 20;
         }
+        
+        
 
         static float getSize(EnemyType type) {
             switch (type) {
@@ -1046,6 +1245,10 @@ public class TopDownShooterOpenGL {
                 case TANK:  return 6;
                 default:    return 3;
             }
+        }
+        
+        int getXp() {
+        	return this.xp;
         }
 
         void update(float deltaTime, Player player) {
@@ -1087,8 +1290,8 @@ public class TopDownShooterOpenGL {
                 perpX /= plen;
                 perpY /= plen;
 
-                float wobbleFreq = 8.0f;
-                float wobbleAmp = 60.0f;
+                float wobbleFreq = 10.0f;
+                float wobbleAmp = 200.0f;
                 float wobble = (float)Math.sin((float)glfwGetTime() * wobbleFreq) * wobbleAmp;
 
                 x += vx * deltaTime + perpX * wobble * deltaTime;
@@ -1100,6 +1303,192 @@ public class TopDownShooterOpenGL {
         }
 
     }
+    
+ // LaserBullet: nagyobb, áthatoló lövedék
+    private static class LaserBullet extends Bullet {
+        int pierce;
+        int damage;
+
+        LaserBullet(float x, float y, float vx, float vy, int damage, int pierce) {
+            super(x, y, vx, vy);
+            this.damage = damage;
+            this.pierce = pierce;
+            this.size = 18; // nagyobb vizuál
+        }
+
+        void onHit(Enemy e) {
+            e.hp -= damage;
+            pierce--;
+            SoundManager.play("damage");
+        }
+    }
+    
+ // GadgetSystem: kezeli az orbit pengéket és a laser működését (update + render)
+    private class GadgetSystem {
+        private final Map<Enemy, Float> orbitHitTimers = new HashMap<>();
+        private float laserTimer = 0f;
+        private float radius = 100f;          
+        private float spin = 3.2f;
+
+        // frissítés (hívjuk minden frame-ben, ha nincs levelup menu)
+        void update(float dt) {
+            updateOrbitBlades(dt);
+            updateLaser(dt);
+        }
+
+        // kirajzolás: orbit blades és laser-lövedékek vizuálja
+        void render() {
+            renderOrbitBlades();
+            renderLaserBullets();
+        }
+
+        /* ------------------ Orbit blade logika ------------------ */
+        private void updateOrbitBlades(float dt) {
+            int orbitLevel = getGadgetLevel("Orbit Blade");
+            if (orbitLevel <= 0) return;
+
+            int count = 2 + orbitLevel;
+            float time = (float) glfwGetTime();
+
+            List<Enemy> toRemove = new ArrayList<>();
+
+            for (int i = 0; i < count; i++) {
+                float angle = time * this.spin + i * ((float) Math.PI * 2f / count);
+                float bx = player.x + (float) Math.cos(angle) * this.radius;
+                float by = player.y + (float) Math.sin(angle) * this.radius;
+
+                // ütközés vizsgálat minden enemy-vel
+                for (Enemy e : enemies) {
+                    float d = (float) Math.hypot(e.x - bx, e.y - by);
+                    float hitRadius = (e.size + 10f) / 2f;
+                    Float cd = orbitHitTimers.get(e);
+                    if (cd == null) cd = 0f;
+
+                    if (d < hitRadius && cd <= 0f) {
+                        e.hp -= 1;
+                        SoundManager.play("damage");
+                        orbitHitTimers.put(e, 0.45f);
+
+                        if (e.hp <= 0 && !toRemove.contains(e)) {
+                            toRemove.add(e);
+
+                            // XP érték típus alapján
+                            xpOrbs.add(new XPOrb(e.x, e.y, e.getXp()));
+                            score += e.type == EnemyType.TANK ? 30 : 10;
+
+                            // Life Steal aktiválása
+                            int ls = getGadgetLevel("Life Steal");
+                            if (ls > 0) {
+                                float chance = ls * 0.03f; // 3% per szint
+                                if (Math.random() < chance) {
+                                    player.hp = Math.min(player.maxHp, player.hp + 1);
+                                    floatingTexts.add(new FloatingText(
+                                        player.x, player.y - 40,
+                                        "+HP", 1.0f, -40f,
+                                        0.3f, 1f, 0.3f
+                                    ));
+                                }
+                            }
+
+                           
+                        }
+                    }
+                }
+            }
+
+            // halott ellenfelek eltávolítása
+            enemies.removeAll(toRemove);
+
+            // cooldown csökkentése
+            Iterator<Map.Entry<Enemy, Float>> it = orbitHitTimers.entrySet().iterator();
+            while (it.hasNext()) {
+                Map.Entry<Enemy, Float> en = it.next();
+                float val = en.getValue() - dt;
+                if (val <= 0f) it.remove();
+                else en.setValue(val);
+            }
+        }
+
+
+        private void renderOrbitBlades() {
+            int orbitLevel = getGadgetLevel("Orbit Blade");
+            if (orbitLevel <= 0) return;
+            if (!SoundManager.isPlaying("orbit_loop")) {
+                SoundManager.loop("orbit_loop");
+            }
+            int count = 2 + orbitLevel;
+            float time = (float)glfwGetTime();
+
+            // Használjuk ugyanazt a VAO/quad render pipeline-t mint a fő render
+            glUseProgram(program);
+            glBindVertexArray(vao);
+            for (int i = 0; i < count; i++) {
+                float angle = time * this.spin + i * ((float)Math.PI * 2f / count);
+                float bx = player.x + (float)Math.cos(angle) * this.radius;
+                float by = player.y + (float)Math.sin(angle) * this.radius;
+                glUniformMatrix4fv(uniModel, false, createModelMatrix(bx, by, 30f, 30f));
+                glUniform4f(uniColor, 0.9f, 0.9f, 0.2f, 1.0f);
+                glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+            }
+            glBindVertexArray(0);
+        }
+
+        /* ------------------ Laser logika ------------------ */
+        private void updateLaser(float dt) {
+            laserTimer -= dt;
+            int laserLevel = getGadgetLevel("Laser");
+            if (laserLevel <= 0) return;
+
+            if (laserTimer <= 0f && !enemies.isEmpty()) {
+                // cél: legközelebbi enemy
+                Enemy nearest = null; float best = Float.MAX_VALUE;
+                for (Enemy e : enemies) {
+                    float dx = e.x - player.x, dy = e.y - player.y;
+                    float d2 = dx*dx + dy*dy;
+                    if (d2 < best) { best = d2; nearest = e; }
+                }
+                if (nearest != null) {
+                    float dx = nearest.x - player.x;
+                    float dy = nearest.y - player.y;
+                    float len = (float)Math.sqrt(dx*dx + dy*dy); if (len==0f) len=1f;
+                    float speed = 1200f;
+                    int damage = 2 + laserLevel * 2;
+                    int pierce = 4 + laserLevel * 2; // eggyel több, hogy jobban látszódjon
+                    bullets.add(new LaserBullet(player.x, player.y, dx/len*speed, dy/len*speed, damage, pierce));
+                    // cooldown csökkenthető a szinttel (min 1s)
+
+                    SoundManager.play("laser");
+                    laserTimer = Math.max(1f, 9f - laserLevel * 2);
+                }
+            }
+        }
+
+        private void renderLaserBullets() {
+            glUseProgram(program);
+            glBindVertexArray(vao);
+
+            // végigmegyünk a bullets listán és csak a LaserBullet-eket rajzoljuk itt
+            for (Bullet b : bullets) {
+                if (!(b instanceof LaserBullet)) continue;
+                LaserBullet lb = (LaserBullet) b;
+
+                // glow (átlátszó, nagyobb kör)
+                glUniformMatrix4fv(uniModel, false, createModelMatrix(lb.x, lb.y, lb.size * 2.4f, lb.size * 2.4f));
+                glUniform4f(uniColor, 1.0f, 0.2f, 0.2f, 0.22f);
+                glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+                // mag (élénk piros)
+                glUniformMatrix4fv(uniModel, false, createModelMatrix(lb.x, lb.y, lb.size, lb.size));
+                glUniform4f(uniColor, 1.0f, 0.08f, 0.08f, 1.0f);
+                glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+            }
+
+            glBindVertexArray(0);
+        }
+    }
+
+
+
 
     
  // Gadget osztály

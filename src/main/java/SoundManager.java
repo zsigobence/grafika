@@ -19,12 +19,15 @@ import static org.lwjgl.stb.STBVorbis.stb_vorbis_decode_filename;
 public class SoundManager {
     private static long device;
     private static long context;
+    private static boolean initialized = false;
 
     private static final Map<String, Integer> buffers = new HashMap<>();
     private static final Map<String, Integer> sources = new HashMap<>();
 
     // Inicializálás
     public static void init() {
+        if (initialized) return;
+        initialized = true;
         device = ALC10.alcOpenDevice((CharSequence) null);
         if (device == NULL) {
             throw new IllegalStateException("Nem sikerült megnyitni az alapértelmezett hang eszközt!");
@@ -131,9 +134,55 @@ public class SoundManager {
             checkError("alSourceStop");
         }
     }
+    
+    // Ellenőrzi, hogy a hang éppen szól-e
+    public static boolean isPlaying(String name) {
+        Integer source = sources.get(name);
+        if (source == null) return false;
+
+        int state = AL10.alGetSourcei(source, AL10.AL_SOURCE_STATE);
+        checkError("alGetSourcei (state)");
+        return state == AL10.AL_PLAYING;
+    }
+    
+ // Többszörös lejátszás ugyanabból a hangból
+    public static void playOverlap(String name) {
+        Integer buffer = buffers.get(name);
+        if (buffer == null) {
+            System.out.println("❌ playOverlap('" + name + "') - nincs buffer!");
+            return;
+        }
+
+        // Új forrás generálása
+        int source = AL10.alGenSources();
+        checkError("alGenSources (overlap)");
+        AL10.alSourcei(source, AL10.AL_BUFFER, buffer);
+        checkError("alSourcei (buffer bind overlap)");
+        AL10.alSourcei(source, AL10.AL_LOOPING, AL10.AL_FALSE);
+        checkError("alSourcei (looping=false overlap)");
+
+        AL10.alSourcePlay(source);
+        checkError("alSourcePlay (overlap)");
+
+        // Opció: automatikus törlés, ha a hang befejeződik
+        new Thread(() -> {
+            int state;
+            do {
+                state = AL10.alGetSourcei(source, AL10.AL_SOURCE_STATE);
+                try { Thread.sleep(10); } catch (InterruptedException ignored) {}
+            } while (state == AL10.AL_PLAYING);
+            if (AL10.alIsSource(source)) {
+                AL10.alDeleteSources(source);
+            }
+        }).start();
+    }
+
+
 
     // Takarítás
     public static void cleanup() {
+        if (!initialized) return;
+        initialized = false;
         for (int source : sources.values()) {
             AL10.alDeleteSources(source);
             checkError("alDeleteSources");
