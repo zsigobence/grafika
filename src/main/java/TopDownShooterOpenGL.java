@@ -906,13 +906,6 @@ public class TopDownShooterOpenGL {
 
                 glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
             }
-            int texUni = GL20.glGetUniformLocation(program, "tex");
-            int modelUni = GL20.glGetUniformLocation(program, "model");
-            System.out.println("Texture uniform location: " + texUni);
-            System.out.println("Model uniform location: " + modelUni);
-
-
-
 
         }
 
