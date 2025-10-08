@@ -30,7 +30,7 @@
 
 
 
-    **Kód szétdarabolása külön osztáylokba, mert már nem volt átlátható az 1500sor(majdnem belerokkantam)**
+    **Kód szétdarabolása külön osztályokba, mert már nem volt átlátható az 1500sor(majdnem belerokkantam)**
 
 
 ## További feladatok 
