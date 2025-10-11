@@ -38,6 +38,10 @@ public class TopDownShooterOpenGL {
     // Font / text
     private int fontTexture, textVAO, textVBO;
     private STBTTBakedChar.Buffer cdata;
+    
+    // --- Kamera shake ---
+    private float shakeTime = 0f;
+    private float shakeIntensity = 0f;
 
     private int score = 0;
 
@@ -408,6 +412,7 @@ public class TopDownShooterOpenGL {
 
             if (checkCollision(enemy, player)) {
                 player.hp--; // ellenség sebzi a játékost
+                triggerShake(8f, 0.3f);
                 xpOrbs.add(new XPOrb(enemy.x, enemy.y, enemy.getXp())); 
                 enemyIterator.remove();
                 if (player.isDead()) {
@@ -478,6 +483,11 @@ public class TopDownShooterOpenGL {
             ft.update(deltaTime);
             if (ft.life <= 0f) ftIt.remove();
         }
+        
+        if (shakeTime > 0) {
+            shakeTime -= deltaTime;
+            if (shakeTime < 0) shakeTime = 0;
+        }
     }
 
     private void render() {
@@ -490,6 +500,13 @@ public class TopDownShooterOpenGL {
         // Kamera: középre a játékos, de ne lépjünk túl a világ határain
         camLeft = player.x - width / 2.0f;
         float camRight = player.x + width / 2.0f;
+        
+        if (shakeTime > 0) {
+            double angle = Math.random() * Math.PI * 2.0;
+            float offset = shakeIntensity * (float) (Math.random() * 2 - 1);
+            camLeft += Math.cos(angle) * offset;
+            camTop  += Math.sin(angle) * offset;
+        }
         camTop = player.y - height / 2.0f;
         float camBottom = player.y + height / 2.0f;
         if (camLeft < 0) { camLeft = 0; camRight = width; }
@@ -1478,9 +1495,13 @@ public class TopDownShooterOpenGL {
 
             glBindVertexArray(0);
         }
+
     }
 
-
+    private void triggerShake(float intensity, float duration) {
+        shakeIntensity = intensity;
+        shakeTime = duration;
+    }
 
 
     
