@@ -89,7 +89,7 @@ public class GadgetSystem {
     private void renderOrbitBlades(Renderer renderer) {
         int level = world.getGadgetLevel("Orbit Blade");
         if (level <= 0) return;
-
+        String texturePath = "src/main/assets/blade.png";
         int count = 2 + level;
         float time = (float) glfwGetTime();
         float radius = 100f, spin = 3.2f;
@@ -98,7 +98,12 @@ public class GadgetSystem {
             float angle = time * spin + i * ((float) Math.PI * 2f / count);
             float bx = player.x + (float) Math.cos(angle) * radius;
             float by = player.y + (float) Math.sin(angle) * radius;
-            renderer.drawQuad(bx, by, 30f, 30f, 0.9f, 0.9f, 0.2f, 1.0f);
+            if (renderer.getTextureLoader().isTextureLoaded(texturePath)) {
+                renderer.renderTextureInWorld(texturePath, bx, by, 30f, 30f);
+            } else {
+            	renderer.drawQuad(bx, by, 30f, 30f, 0.9f, 0.9f, 0.2f, 1.0f);
+            }
+            
         }
     }
     

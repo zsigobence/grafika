@@ -93,6 +93,8 @@ public class UIRenderer {
             String effect = getNextLevelEffect(gadget);
             renderer.renderText(effect, x - getTextWidth(effect, 0.7f)/2f, startY - boxH/2f + 80f, 0.7f, 0f, 1f, 0f, 1f);
             
+            String texturePath = getGadgetTexturePath(gadget.name);
+            renderer.renderTexture(texturePath, x, startY + boxH/2f - 75, 64f, 64f);
             // Level squares
             int max = gadget.maxLevel;
             float squareSize = 16f, squareGap = 6f;
@@ -123,6 +125,29 @@ public class UIRenderer {
             case "Orbit Blade": return "Blades: " + (2 + gadget.level) + " -> " + (2 + nextLevel);
             case "Laser Beam": return "Cooldown: " + Math.max(1f, 9f - gadget.level * 2) + "s -> " + Math.max(1f, 9f - nextLevel * 2) + "s";
             default: return "Upgrade";
+        }
+    }
+    
+    private String getGadgetTexturePath(String gadgetName) {
+        switch (gadgetName) {
+            case "Attack Damage":
+                return "src/main/assets/damage.png";
+            case "Attack Speed":
+                return "src/main/assets/attack_speed.png";
+            case "Max HP":
+                return "src/main/assets/heart.png";
+            case "Movement Speed":
+                return "src/main/assets/move_speed.png";
+            case "Multi Attack":
+                return "src/main/assets/multishot.png";
+            case "Life Steal":
+                return "src/main/assets/heart_half.png";
+            case "Orbit Blade":
+                return "src/main/assets/blade.png";
+            case "Laser Beam":
+                return "src/main/assets/laser.png";
+            default:
+                return "";
         }
     }
 }

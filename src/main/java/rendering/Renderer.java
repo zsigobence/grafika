@@ -18,10 +18,12 @@ import static org.lwjgl.stb.STBTruetype.*;
 public class Renderer {
     private final int width, height;
     private UIRenderer uiRenderer;
+    private TextureLoader textureLoader;
 
-    private int program, textProgram;
+    private int program, textProgram, textureProgram;
     private int vao, vbo, ebo;
     private int uniProjection, uniModel, uniColor;
+    private int texUniProjection, texUniModel, texUniTexture;
 
     private int fontTexture, textVAO, textVBO;
     private STBTTBakedChar.Buffer cdata;
@@ -58,11 +60,32 @@ public class Renderer {
         "uniform vec4 uTextColor;\n" +
         "void main() { float alpha = texture(uTexture, TexCoord).r; FragColor = vec4(uTextColor.rgb, alpha * uTextColor.a); }";
 
+    // Új: Textúra shader
+    private static final String textureVertexShaderSource =
+        "#version 330 core\n" +
+        "layout (location = 0) in vec2 aPos;\n" +
+        "uniform mat4 uModel;\n" +
+        "uniform mat4 uProjection;\n" +
+        "out vec2 TexCoord;\n" +
+        "void main() {\n" +
+        "   gl_Position = uProjection * uModel * vec4(aPos, 0.0, 1.0);\n" +
+        "   TexCoord = aPos + vec2(0.5); // Convert from [-0.5,0.5] to [0,1]\n" +
+        "}";
+
+    private static final String textureFragmentShaderSource =
+        "#version 330 core\n" +
+        "in vec2 TexCoord;\n" +
+        "out vec4 FragColor;\n" +
+        "uniform sampler2D uTexture;\n" +
+        "void main() { FragColor = texture(uTexture, TexCoord); }";
+
 
     public Renderer(int width, int height) {
         this.width = width;
         this.height = height;
+        textureLoader = TextureLoader.getInstance();
     }
+    
 
     public void init() {
         program = createShader(vertexShaderSource, fragmentShaderSource);
@@ -71,6 +94,13 @@ public class Renderer {
         uniColor = glGetUniformLocation(program, "uColor");
 
         textProgram = createShader(textVertexShaderSource, textFragmentShaderSource);
+        
+        // Új: Textúra shader program
+        textureProgram = createShader(textureVertexShaderSource, textureFragmentShaderSource);
+        texUniProjection = glGetUniformLocation(textureProgram, "uProjection");
+        texUniModel = glGetUniformLocation(textureProgram, "uModel");
+        texUniTexture = glGetUniformLocation(textureProgram, "uTexture");
+
         initFont();
 
         // General VAO for quads
@@ -103,6 +133,7 @@ public class Renderer {
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         
         this.uiRenderer = new UIRenderer(this, width, height);
+        loadTextures();
     }
 
     public void render(GameWorld world) {
@@ -111,6 +142,8 @@ public class Renderer {
 
         // --- WORLD RENDERING ---
         setupCamera(world);
+        
+        // Render world with normal shader
         glUseProgram(program);
         glUniformMatrix4fv(uniProjection, false, ortho(camLeft, camLeft + width, camTop + height, camTop, -1.0f, 1.0f));
         glBindVertexArray(vao);
@@ -125,21 +158,121 @@ public class Renderer {
 
         glBindVertexArray(0);
         
-        glUseProgram(program);
-        glUniformMatrix4fv(uniProjection, false, ortho(0, width, height, 0, -1.0f, 1.0f)); // <<< fix ortho UI-hoz
-        glBindVertexArray(vao);
         // --- UI RENDERING ---
+        // Switch to UI projection (screen coordinates)
+        glUseProgram(program);
+        glUniformMatrix4fv(uniProjection, false, ortho(0, width, height, 0, -1.0f, 1.0f));
+        glBindVertexArray(vao);
+        
         uiRenderer.render(world, camLeft, camTop);
+    }
+    
+    private void loadTextures() {
+        try {
+            // Betöltjük a textúrákat
+            textureLoader.loadTexture("src/main/assets/blade.png");
+        } catch (Exception e) {
+            System.err.println("Error loading textures: " + e.getMessage());
+        }
+    }
+    
+    // ÚJ: Textúra renderelés metódusok - ezeket használja a UIRenderer
+    public void renderTexture(String texturePath, float centerX, float centerY, float width, float height) {
+        TextureLoader.TextureInfo textureInfo = textureLoader.getTextureInfo(texturePath);
+        if (textureInfo == null) {
+            System.err.println("Texture not found: " + texturePath);
+            return;
+        }
+
+        // Textúra shader használata
+        glUseProgram(textureProgram);
+        glBindVertexArray(vao);
+        
+        // Projection beállítása (UI mód)
+        glUniformMatrix4fv(texUniProjection, false, ortho(0, this.width, this.height, 0, -1.0f, 1.0f));
+        
+        // Model mátrix beállítása
+        glUniformMatrix4fv(texUniModel, false, createModelMatrix(centerX, centerY, width, height));
+        
+        // Textúra kötése
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, textureInfo.textureId);
+        glUniform1i(texUniTexture, 0);
+        
+        // Rajzolás
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        
+        // Textúra leválasztása
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    
+    public void renderTextureAspectRatio(String texturePath, float centerX, float centerY, float maxSize) {
+        TextureLoader.TextureInfo textureInfo = textureLoader.getTextureInfo(texturePath);
+        if (textureInfo == null) return;
+        
+        float aspectRatio = (float)textureInfo.width / textureInfo.height;
+        float width, height;
+        
+        if (aspectRatio > 1) {
+            width = maxSize;
+            height = maxSize / aspectRatio;
+        } else {
+            height = maxSize;
+            width = maxSize * aspectRatio;
+        }
+        
+        renderTexture(texturePath, centerX, centerY, width, height);
+    }
+    
+    public void renderTextureRotated(String texturePath, float centerX, float centerY, float width, float height, float angle) {
+        // Egyszerűsített változat - kihagyjuk a forgatást most
+        renderTexture(texturePath, centerX, centerY, width, height);
+    }
+
+    public void renderTextureInWorld(String texturePath, float centerX, float centerY, float width, float height) {
+        TextureLoader.TextureInfo textureInfo = textureLoader.getTextureInfo(texturePath);
+        if (textureInfo == null) {
+            textureInfo = textureLoader.loadTexture(texturePath);
+            if (textureInfo == null) {
+                // Fallback: színes négyzet
+                drawQuad(centerX, centerY, width, height, 0.8f, 0.2f, 0.2f, 0.5f);
+                return;
+            }
+        }
+
+        // Textúra shader használata
+        glUseProgram(textureProgram);
+        glBindVertexArray(vao);
+        
+        // FONTOS: Világ projekció használata (nem UI projekció)
+        glUniformMatrix4fv(texUniProjection, false, ortho(camLeft, camLeft + this.width, camTop + this.height, camTop, -1.0f, 1.0f));
+        
+        // Model mátrix beállítása
+        glUniformMatrix4fv(texUniModel, false, createModelMatrix(centerX, centerY, width, height));
+        
+        // Textúra kötése
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, textureInfo.textureId);
+        glUniform1i(texUniTexture, 0);
+        
+        // Rajzolás
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        
+        // Textúra leválasztása
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    public TextureLoader getTextureLoader() {
+        return textureLoader;
     }
     
     private void setupCamera(GameWorld world) {
         Player player = world.getPlayer();
-        camLeft = player.x - width / 2.0f;
-        camTop = player.y - height / 2.0f;
+        camLeft = player.x - this.width / 2.0f;
+        camTop = player.y - this.height / 2.0f;
         if (camLeft < 0) camLeft = 0;
-        if (camLeft > world.worldWidth - width) camLeft = world.worldWidth - width;
+        if (camLeft > world.worldWidth - this.width) camLeft = world.worldWidth - this.width;
         if (camTop < 0) camTop = 0;
-        if (camTop > world.worldHeight - height) camTop = world.worldHeight - height;
+        if (camTop > world.worldHeight - this.height) camTop = world.worldHeight - this.height;
     }
 
     // Drawing methods
@@ -242,6 +375,7 @@ public class Renderer {
     public void cleanup() {
         glDeleteProgram(program);
         glDeleteProgram(textProgram);
+        glDeleteProgram(textureProgram);
         glDeleteVertexArrays(vao);
         glDeleteBuffers(vbo);
         glDeleteBuffers(ebo);
@@ -249,6 +383,7 @@ public class Renderer {
         glDeleteBuffers(textVBO);
         glDeleteTextures(fontTexture);
         if (cdata != null) cdata.free();
+        textureLoader.cleanup();
     }
     
     // --- PRIVATE HELPERS ---

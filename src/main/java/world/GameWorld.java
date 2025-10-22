@@ -36,6 +36,8 @@ public class GameWorld {
     public List<Gadget> availableGadgets = new ArrayList<>();
     public boolean levelUpMenuActive = false;
     private GadgetSystem gadgetSystem;
+    private boolean gameOver = false;
+
 
     public void init() {
         player = new Player(worldWidth / 2.0f, worldHeight / 2.0f, 10, 1, 250f);
@@ -70,6 +72,7 @@ public class GameWorld {
     public List<FloatingText> getFloatingTexts() { return floatingTexts; }
     public List<Gadget> getGadgets() { return gadgets; }
     public GadgetSystem getGadgetSystem() { return gadgetSystem; }
+    public boolean isGameOver() { return gameOver; }
 
     private void updateBullets(float deltaTime) {
         bullets.removeIf(b -> {
@@ -85,7 +88,7 @@ public class GameWorld {
         enemySpawnInterval = baseEnemySpawnInterval * spawnMultiplier;
         enemySpawnTimer += deltaTime;
         float difficultyMultiplier = 1.0f + 0.15f * difficultyStages;
-        float spawnRadius = 800 * 0.8f + 200.0f; // Simplified, assuming 800 is width
+        float spawnRadius = 800 * 0.8f + 200.0f; 
 
         if (enemySpawnTimer > enemySpawnInterval) {
             enemySpawnTimer = 0.0;
@@ -140,13 +143,11 @@ public class GameWorld {
             // Enemy-Player collision
             if (checkCollision(enemy, player)) {
                 player.takeDamage(1);
-                handleEnemyDeath(enemy); // Enemy dies on collision
+                handleEnemyDeath(enemy); 
                 enemyIterator.remove();
                 if (player.isDead()) {
                     System.out.println("Game Over!");
-                    // It's better to set a state here, and let Game handle the window closing
-                    // For now, this is a quick solution:
-                    // glfwSetWindowShouldClose(window, true);
+                    gameOver = true;
                 }
             }
         }
