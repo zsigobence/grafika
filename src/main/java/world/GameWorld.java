@@ -10,7 +10,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
-import static org.lwjgl.glfw.GLFW.glfwGetTime;
 
 public class GameWorld {
     public int worldWidth = 2000;
@@ -187,7 +186,7 @@ public class GameWorld {
             if (checkCollision(orb, player)) {
                 xp += orb.value;
                 floatingTexts.add(new FloatingText(player.x, player.y - player.size, "+" + orb.value, 1.2f, -40.0f, 1.0f, 1.0f, 0.2f));
-                SoundManager.play("xp");
+                SoundManager.playOverlap("xp");
 
                 if (xp >= xpToNext) {
                     levelUp();
@@ -240,7 +239,7 @@ public class GameWorld {
                      float angle = baseAngle + (i - (count - 1) / 2.0f) * spread;
                      bullets.add(new Bullet(player.x, player.y, (float)Math.cos(angle) * bSpeed, (float)Math.sin(angle) * bSpeed));
                 }
-                SoundManager.play("shoot");
+                SoundManager.playOverlap("shoot");
             }
         }
         player.shootCooldown = 0.75f * getAttackSpeedMultiplier();

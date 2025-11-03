@@ -21,9 +21,21 @@ public class Renderer {
     private TextureLoader textureLoader;
 
     private int program, textProgram, textureProgram;
-    private int vao, vbo, ebo;
-    private int uniProjection, uniModel, uniColor;
+    private int uniProjection;
     private int texUniProjection, texUniModel, texUniTexture;
+    private int textureVAO, textureVBO, textureEBO;
+    private static final int MAX_QUADS = 10000;
+    private static final int MAX_VERTICES = MAX_QUADS * 4;
+    private static final int MAX_INDICES = MAX_QUADS * 6;
+    private static final int VERTEX_SIZE_FLOATS = 6;
+    private static final int VERTEX_SIZE_BYTES = VERTEX_SIZE_FLOATS * Float.BYTES;
+
+    // A VAO, VBO, EBO a színes kötegelőhöz
+    private int colorBatchVAO, colorBatchVBO, colorBatchEBO;
+    // A CPU-oldali buffer, amibe a vertex adatokat gyűjtjük
+    private FloatBuffer colorBatchBuffer;
+    // Hány négyzet van éppen a kötegben
+    private int colorBatchQuadCount = 0;
 
     private int fontTexture, textVAO, textVBO;
     private STBTTBakedChar.Buffer cdata;
@@ -32,17 +44,22 @@ public class Renderer {
 
     // Shader Source
     private static final String vertexShaderSource =
-        "#version 330 core\n" +
-        "layout (location = 0) in vec2 aPos;\n" +
-        "uniform mat4 uModel;\n" +
-        "uniform mat4 uProjection;\n" +
-        "void main() { gl_Position = uProjection * uModel * vec4(aPos, 0.0, 1.0); }";
+    	    "#version 330 core\n" +
+    	    "layout (location = 0) in vec2 aPos;\n" +
+    	    "layout (location = 1) in vec4 aColor;\n" + 
+    	    "uniform mat4 uProjection;\n" +
+    	    "out vec4 vColor;\n" + 
+    	    "void main() {\n" +
+    	    "   gl_Position = uProjection * vec4(aPos, 0.0, 1.0);\n" + 
+    	    "   vColor = aColor;\n" +
+    	    "}";
 
+    	
     private static final String fragmentShaderSource =
-        "#version 330 core\n" +
-        "out vec4 FragColor;\n" +
-        "uniform vec4 uColor;\n" +
-        "void main() { FragColor = uColor; }";
+    	    "#version 330 core\n" +
+    	    "in vec4 vColor;\n" + 
+    	    "out vec4 FragColor;\n" +
+    	    "void main() { FragColor = vColor; }";
 
     private static final String textVertexShaderSource =
         "#version 330 core\n" +
@@ -90,8 +107,6 @@ public class Renderer {
     public void init() {
         program = createShader(vertexShaderSource, fragmentShaderSource);
         uniProjection = glGetUniformLocation(program, "uProjection");
-        uniModel = glGetUniformLocation(program, "uModel");
-        uniColor = glGetUniformLocation(program, "uColor");
 
         textProgram = createShader(textVertexShaderSource, textFragmentShaderSource);
         
@@ -102,30 +117,76 @@ public class Renderer {
         texUniTexture = glGetUniformLocation(textureProgram, "uTexture");
 
         initFont();
+        
+        colorBatchVAO = glGenVertexArrays();
+        glBindVertexArray(colorBatchVAO);
 
-        // General VAO for quads
-        float[] vertices = {-0.5f, -0.5f, 0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f};
-        int[] indices = {0, 1, 2, 2, 3, 0};
-        vao = glGenVertexArrays();
-        vbo = glGenBuffers();
-        ebo = glGenBuffers();
-        glBindVertexArray(vao);
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferData(GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices, GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * Float.BYTES, 0);
+        colorBatchVBO = glGenBuffers();
+        glBindBuffer(GL_ARRAY_BUFFER, colorBatchVBO);
+        glBufferData(GL_ARRAY_BUFFER, (long)MAX_VERTICES * VERTEX_SIZE_BYTES, GL_DYNAMIC_DRAW);
+
+
+        glVertexAttribPointer(0, 2, GL_FLOAT, false, VERTEX_SIZE_BYTES, 0);
         glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 4, GL_FLOAT, false, VERTEX_SIZE_BYTES, 2 * Float.BYTES); // 2 float eltolás
+        glEnableVertexAttribArray(1);
+
+        int[] indices = new int[MAX_INDICES];
+        int offset = 0;
+        for (int i = 0; i < MAX_QUADS; i++) {
+            indices[i * 6 + 0] = offset + 0;
+            indices[i * 6 + 1] = offset + 1;
+            indices[i * 6 + 2] = offset + 2;
+            indices[i * 6 + 3] = offset + 2;
+            indices[i * 6 + 4] = offset + 3;
+            indices[i * 6 + 5] = offset + 0;
+            offset += 4; 
+        }
+        colorBatchEBO = glGenBuffers();
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, colorBatchEBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices, GL_STATIC_DRAW);
+
+        colorBatchBuffer = MemoryUtil.memAllocFloat(MAX_VERTICES * VERTEX_SIZE_FLOATS);
+        
+        float[] texVertices = {
+        	    // Pos         
+        	    -0.5f, -0.5f, 
+        	     0.5f, -0.5f, 
+        	     0.5f,  0.5f, 
+        	    -0.5f,  0.5f  
+        	};
+        	int[] texIndices = { 0, 1, 2, 2, 3, 0 };
+
+        	textureVAO = glGenVertexArrays();
+        	textureVBO = glGenBuffers();
+        	textureEBO = glGenBuffers();
+
+        	glBindVertexArray(textureVAO);
+
+        	glBindBuffer(GL_ARRAY_BUFFER, textureVBO);
+        	glBufferData(GL_ARRAY_BUFFER, texVertices, GL_STATIC_DRAW);
+
+        	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, textureEBO);
+        	glBufferData(GL_ELEMENT_ARRAY_BUFFER, texIndices, GL_STATIC_DRAW);
+
+        	glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * Float.BYTES, 0);
+        	glEnableVertexAttribArray(0);
 
         // Text VAO/VBO
         textVAO = glGenVertexArrays();
         textVBO = glGenBuffers();
         glBindVertexArray(textVAO);
         glBindBuffer(GL_ARRAY_BUFFER, textVBO);
-        glVertexAttribPointer(0, 2, GL_FLOAT, false, 4 * Float.BYTES, 0);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(1, 2, GL_FLOAT, false, 4 * Float.BYTES, 2 * Float.BYTES);
-        glEnableVertexAttribArray(1);
+        int vertexSizeBytes = 4 * Float.BYTES; 
+	    int maxVertices = 2048 * 6; 
+	
+
+	    glBufferData(GL_ARRAY_BUFFER, (long)maxVertices * vertexSizeBytes, GL_DYNAMIC_DRAW);
+	
+	    glVertexAttribPointer(0, 2, GL_FLOAT, false, vertexSizeBytes, 0);
+	    glEnableVertexAttribArray(0);
+	    glVertexAttribPointer(1, 2, GL_FLOAT, false, vertexSizeBytes, 2 * Float.BYTES);
+	    glEnableVertexAttribArray(1);
 
         glBindVertexArray(0);
         
@@ -143,34 +204,70 @@ public class Renderer {
         // --- WORLD RENDERING ---
         setupCamera(world);
         
-        // Render world with normal shader
-        glUseProgram(program);
-        glUniformMatrix4fv(uniProjection, false, ortho(camLeft, camLeft + width, camTop + height, camTop, -1.0f, 1.0f));
-        glBindVertexArray(vao);
+        float[] worldProjection = ortho(camLeft, camLeft + width, camTop + height, camTop, -1.0f, 1.0f);
+        
+        startColorBatch(worldProjection);
 
         drawGrid(world);
         drawXPOrbs(world);
         drawPlayer(world.getPlayer());
         drawEnemies(world);
         drawBullets(world);
+        world.getGadgetSystem().renderLaserBullets(this);
 
-        world.getGadgetSystem().render(this);
+        flushColorBatch();
 
+        world.getGadgetSystem().renderOrbitBlades(this);
+        
         glBindVertexArray(0);
         
         // --- UI RENDERING ---
-        // Switch to UI projection (screen coordinates)
-        glUseProgram(program);
-        glUniformMatrix4fv(uniProjection, false, ortho(0, width, height, 0, -1.0f, 1.0f));
-        glBindVertexArray(vao);
+        float[] uiProjection = ortho(0, width, height, 0, -1.0f, 1.0f);
+        startColorBatch(uiProjection);
+
+        uiRenderer.renderQuads(world); 
+        flushColorBatch();
         
-        uiRenderer.render(world, camLeft, camTop);
+        uiRenderer.renderImmediate(world, camLeft, camTop);
+    }
+    
+    public float getTextWidth(String text, float scale) {
+        if (cdata == null) {
+            return text.length() * 10f * scale; 
+        }
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            FloatBuffer xBuf = stack.floats(0.0f);
+            FloatBuffer yBuf = stack.floats(0.0f);
+            
+            STBTTAlignedQuad q = STBTTAlignedQuad.malloc(stack);
+
+            for (int i = 0; i < text.length(); i++) {
+                char c = text.charAt(i);
+                if (c < 32 || c >= 128) continue;
+                stbtt_GetBakedQuad(cdata, 512, 512, c - 32, xBuf, yBuf, q, true);
+            }
+
+            return xBuf.get(0) * scale;
+            
+        } catch (Exception e) {
+            System.err.println("Hiba a szöveg szélességének számítása közben: " + e.getMessage());
+            return text.length() * 10f * scale;
+        }
     }
     
     private void loadTextures() {
         try {
-            // Betöltjük a textúrákat
             textureLoader.loadTexture("src/main/assets/blade.png");
+            textureLoader.loadTexture("src/main/assets/damage.png");
+            textureLoader.loadTexture("src/main/assets/attack_speed.png");
+            textureLoader.loadTexture("src/main/assets/heart.png");
+            textureLoader.loadTexture("src/main/assets/move_speed.png");
+            textureLoader.loadTexture("src/main/assets/multishot.png");
+            textureLoader.loadTexture("src/main/assets/heart_half.png");
+            textureLoader.loadTexture("src/main/assets/laser.png");
+            
+            System.out.println("All textures pre-loaded.");
         } catch (Exception e) {
             System.err.println("Error loading textures: " + e.getMessage());
         }
@@ -186,7 +283,7 @@ public class Renderer {
 
         // Textúra shader használata
         glUseProgram(textureProgram);
-        glBindVertexArray(vao);
+        glBindVertexArray(textureVAO);
         
         // Projection beállítása (UI mód)
         glUniformMatrix4fv(texUniProjection, false, ortho(0, this.width, this.height, 0, -1.0f, 1.0f));
@@ -232,17 +329,15 @@ public class Renderer {
     public void renderTextureInWorld(String texturePath, float centerX, float centerY, float width, float height) {
         TextureLoader.TextureInfo textureInfo = textureLoader.getTextureInfo(texturePath);
         if (textureInfo == null) {
-            textureInfo = textureLoader.loadTexture(texturePath);
-            if (textureInfo == null) {
-                // Fallback: színes négyzet
-                drawQuad(centerX, centerY, width, height, 0.8f, 0.2f, 0.2f, 0.5f);
-                return;
-            }
+        	System.err.println("Missing texture in renderTextureInWorld: " + texturePath);
+        	drawQuad(centerX, centerY, width, height, 0.8f, 0.2f, 0.2f, 0.5f);
+        	return;
+            
         }
 
         // Textúra shader használata
         glUseProgram(textureProgram);
-        glBindVertexArray(vao);
+        glBindVertexArray(textureVAO);
         
         // FONTOS: Világ projekció használata (nem UI projekció)
         glUniformMatrix4fv(texUniProjection, false, ortho(camLeft, camLeft + this.width, camTop + this.height, camTop, -1.0f, 1.0f));
@@ -318,14 +413,29 @@ public class Renderer {
         }
     }
 
-    // Public utility for other systems (like GadgetSystem)
     public void drawQuad(float x, float y, float w, float h, float r, float g, float b, float a) {
-        glUseProgram(program);
-        glBindVertexArray(vao);
-        glUniformMatrix4fv(uniModel, false, createModelMatrix(x, y, w, h));
-        glUniform4f(uniColor, r, g, b, a);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        if (colorBatchQuadCount >= MAX_QUADS) {
+            flushColorBatch();
+            colorBatchBuffer.clear();
+            colorBatchQuadCount = 0;
+        }
+
+
+        float x0 = x - w * 0.5f;
+        float y0 = y - h * 0.5f;
+        float x1 = x + w * 0.5f;
+        float y1 = y + h * 0.5f;
+
+
+        colorBatchBuffer.put(x0).put(y0).put(r).put(g).put(b).put(a);
+        colorBatchBuffer.put(x1).put(y0).put(r).put(g).put(b).put(a);
+        colorBatchBuffer.put(x1).put(y1).put(r).put(g).put(b).put(a);
+        colorBatchBuffer.put(x0).put(y1).put(r).put(g).put(b).put(a);
+
+        colorBatchQuadCount++;
     }
+    
+
     
     public void renderHealthBar(Character character) {
         float barWidth = character.size, barHeight = 5;
@@ -338,6 +448,33 @@ public class Renderer {
         }
     }
     
+    private void startColorBatch(float[] projectionMatrix) {
+        glUseProgram(program);
+        glUniformMatrix4fv(uniProjection, false, projectionMatrix);
+        
+        glBindVertexArray(colorBatchVAO);
+        
+        colorBatchBuffer.clear();
+        colorBatchQuadCount = 0;
+    }
+
+    private void flushColorBatch() {
+        if (colorBatchQuadCount == 0) {
+            return;
+        }
+        glUseProgram(program);
+        colorBatchBuffer.flip();
+        
+        glBindVertexArray(colorBatchVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, colorBatchVBO);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, colorBatchEBO);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, colorBatchBuffer);
+
+        glDrawElements(GL_TRIANGLES, colorBatchQuadCount * 6, GL_UNSIGNED_INT, 0);
+
+        glBindVertexArray(0);
+    }
+    
     public void renderText(String text, float x, float y, float scale, float r, float g, float b, float a) {
         glUseProgram(textProgram);
         glUniformMatrix4fv(glGetUniformLocation(textProgram, "uProjection"), false, ortho(0, width, height, 0, -1, 1));
@@ -347,28 +484,45 @@ public class Renderer {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, fontTexture);
         glBindVertexArray(textVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, textVBO);
+        
+        int charCount = 0;
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             FloatBuffer xBuf = stack.floats(x / scale);
             FloatBuffer yBuf = stack.floats(y / scale);
+            STBTTAlignedQuad q = STBTTAlignedQuad.malloc(stack);
+            
+            FloatBuffer vertices = stack.mallocFloat(text.length() * 6 * 4);
 
             for (int i = 0; i < text.length(); i++) {
                 char c = text.charAt(i);
                 if (c < 32 || c >= 128) continue;
-                STBTTAlignedQuad q = STBTTAlignedQuad.malloc(stack);
                 stbtt_GetBakedQuad(cdata, 512, 512, c - 32, xBuf, yBuf, q, true);
-                float[] vertices = {
-                    q.x0() * scale, q.y0() * scale, q.s0(), q.t0(),
-                    q.x1() * scale, q.y0() * scale, q.s1(), q.t0(),
-                    q.x0() * scale, q.y1() * scale, q.s0(), q.t1(),
-                    q.x1() * scale, q.y1() * scale, q.s1(), q.t1()
-                };
-                glBindBuffer(GL_ARRAY_BUFFER, textVBO);
-                glBufferData(GL_ARRAY_BUFFER, vertices, GL_DYNAMIC_DRAW);
-                glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+                float x0 = q.x0() * scale;
+                float y0 = q.y0() * scale;
+                float x1 = q.x1() * scale;
+                float y1 = q.y1() * scale;
+             
+                vertices.put(x0).put(y0).put(q.s0()).put(q.t0());
+                vertices.put(x0).put(y1).put(q.s0()).put(q.t1());
+                vertices.put(x1).put(y0).put(q.s1()).put(q.t0());
+                
+                
+                vertices.put(x1).put(y0).put(q.s1()).put(q.t0());
+                vertices.put(x0).put(y1).put(q.s0()).put(q.t1());
+                vertices.put(x1).put(y1).put(q.s1()).put(q.t1());
+                
+                charCount++;
             }
+            vertices.flip();
+            glBufferSubData(GL_ARRAY_BUFFER, 0, vertices);
+        }
+        if (charCount > 0) {
+            glDrawArrays(GL_TRIANGLES, 0, charCount * 6);
         }
         glBindVertexArray(0);
+        
     }
     
     // Cleanup
@@ -376,12 +530,18 @@ public class Renderer {
         glDeleteProgram(program);
         glDeleteProgram(textProgram);
         glDeleteProgram(textureProgram);
-        glDeleteVertexArrays(vao);
-        glDeleteBuffers(vbo);
-        glDeleteBuffers(ebo);
+        glDeleteVertexArrays(colorBatchVAO);
+        glDeleteBuffers(colorBatchVBO);
+        glDeleteBuffers(colorBatchEBO);
+        if (colorBatchBuffer != null) {
+            MemoryUtil.memFree(colorBatchBuffer);
+        }
         glDeleteVertexArrays(textVAO);
         glDeleteBuffers(textVBO);
         glDeleteTextures(fontTexture);
+        glDeleteVertexArrays(textureVAO);
+        glDeleteBuffers(textureVBO);
+        glDeleteBuffers(textureEBO);
         if (cdata != null) cdata.free();
         textureLoader.cleanup();
     }
@@ -447,8 +607,8 @@ public class Renderer {
         m[15] = 1f;
         return m;
     }
-
     public float[] createModelMatrix(float x, float y, float w, float h) {
         return new float[]{ w, 0, 0, 0, 0, h, 0, 0, 0, 0, 1, 0, x, y, 0, 1 };
     }
+
 }

@@ -14,50 +14,74 @@ public class UIRenderer {
         this.height = height;
     }
 
-    public void render(GameWorld world, float camLeft, float camTop) {
-        renderHUD(world);
-        renderGadgetsInfo(world);
-        renderFloatingTexts(world, camLeft, camTop);
+
+    public void renderQuads(GameWorld world) {
+        renderHUDQuads(world);
         if (world.levelUpMenuActive) {
-            renderLevelUpMenu(world);
+            renderLevelUpMenuQuads(world);
         }
     }
-    
-    private void renderHUD(GameWorld world) {
-        // Score
-        renderer.renderText("Score: " + world.score, 20, 40, 1.0f, 1f,1f,1f,1f);
-        
-        // Timer
-        int totalSeconds = (int) Math.floor(world.elapsedTime);
-        String timeStr = String.format("%02d:%02d", totalSeconds / 60, totalSeconds % 60);
-        float textW = getTextWidth(timeStr, 1.0f);
-        renderer.renderText(timeStr, width - 20 - textW, 40, 1.0f, 1f, 1f, 1f, 1f);
 
-        // XP Bar
-        String levelText = "Level: " + world.level;
-        float levelTextWidth = getTextWidth(levelText, 1.0f);
-        renderer.renderText(levelText, width / 2f - levelTextWidth / 2f, 18f, 1.0f, 1f, 1f, 1f, 1f);
-        
-        float barW = 220f, barH = 18f;
+
+    public void renderImmediate(GameWorld world, float camLeft, float camTop) {
+        renderHUDImmediate(world);
+        renderGadgetsInfo(world); // Ez csak szöveget rajzol
+        renderFloatingTexts(world, camLeft, camTop); // Ez csak szöveget rajzol
+        if (world.levelUpMenuActive) {
+            renderLevelUpMenuImmediate(world);
+        }
+    }
+
+    // --- FELBONTOTT HUD RENDERELÉS ---
+
+    private void renderHUDQuads(GameWorld world) {
+        // XP Bar (Csak a quadok)
+        float barW = UIConstants.XP_BAR_WIDTH;
+        float barH = UIConstants.XP_BAR_HEIGHT;
         float barX = width / 2.0f - barW / 2f;
-        float barY = 18f + 26f;
+        float barY = UIConstants.XP_BAR_LEVEL_TEXT_Y + UIConstants.XP_BAR_Y_OFFSET;
 
         renderer.drawQuad(barX + barW/2f, barY + barH/2f, barW, barH, 0.85f, 0.85f, 0.87f, 1.0f);
         float percent = world.xpToNext > 0 ? (float) world.xp / world.xpToNext : 0f;
         float fillW = barW * percent;
         if (fillW > 0.001f) {
-            renderer.drawQuad(barX + fillW/2f, barY + barH/2f, fillW, barH - 2, 0.2f + percent * 1.2f, 0.9f - percent * 0.2f, 0.05f, 1f);
+            renderer.drawQuad(barX + fillW/2f, barY + barH/2f, fillW, barH - UIConstants.XP_BAR_INSET, 
+                0.2f + percent * 1.2f, 0.9f - percent * 0.2f, 0.05f, 1f);
         }
     }
+
+    private void renderHUDImmediate(GameWorld world) {
+        // Score (Csak a szöveg)
+        renderer.renderText("Score: " + world.score, 
+            UIConstants.HUD_PADDING_X, UIConstants.HUD_SCORE_Y, 1.0f, 1f,1f,1f,1f);
+        
+        // Timer (Csak a szöveg)
+        int totalSeconds = (int) Math.floor(world.elapsedTime);
+        String timeStr = String.format("%02d:%02d", totalSeconds / 60, totalSeconds % 60);
+        float textW = renderer.getTextWidth(timeStr, 1.0f);
+        renderer.renderText(timeStr, width - UIConstants.HUD_TIMER_PADDING_X - textW, 
+            UIConstants.HUD_SCORE_Y, 1.0f, 1f, 1f, 1f, 1f);
+
+        // XP Bar (Csak a szöveg)
+        String levelText = "Level: " + world.level;
+        float levelTextWidth = renderer.getTextWidth(levelText, 1.0f);
+        renderer.renderText(levelText, width / 2f - levelTextWidth / 2f, 
+            UIConstants.XP_BAR_LEVEL_TEXT_Y, 1.0f, 1f, 1f, 1f, 1f);
+    }
     
+    // --- VÁLTOZATLAN METÓDUSOK (MÁR MOST IS CSAK AZONNALIAK) ---
+
     private void renderGadgetsInfo(GameWorld world) {
-        float startY = height - 100f;
-        renderer.renderText("Gadgets:", 20f, startY, 0.8f, 1f, 1f, 1f, 1f);
+        float startY = height - UIConstants.GADGET_LIST_Y_FROM_BOTTOM;
+        renderer.renderText("Gadgets:", UIConstants.GADGET_LIST_X, startY, 
+            UIConstants.GADGET_LIST_TITLE_SCALE, 1f, 1f, 1f, 1f);
         int drawn = 0;
         for (Gadget g : world.getGadgets()) {
             if (g.level > 0) {
                 String text = g.name + ": " + g.level + "/" + g.maxLevel;
-                renderer.renderText(text, 20f, startY + (drawn + 1) * 15f, 0.7f, 0.8f, 0.8f, 0.8f, 1f);
+                renderer.renderText(text, UIConstants.GADGET_LIST_X, 
+                    startY + (drawn + 1) * UIConstants.GADGET_LIST_LINE_HEIGHT, 
+                    UIConstants.GADGET_LIST_ITEM_SCALE, 0.8f, 0.8f, 0.8f, 1f);
                 drawn++;
             }
         }
@@ -73,31 +97,25 @@ public class UIRenderer {
         }
     }
 
-    private void renderLevelUpMenu(GameWorld world) {
-        renderer.drawQuad(width / 2f, height / 2f, width, height, 0f, 0f, 0f, 0.7f);
-        String title = "LEVEL UP! Choose a gadget:";
-        renderer.renderText(title, width / 2f - getTextWidth(title, 1.2f) / 2f, 60f, 1.2f, 1f, 1f, 0f, 1f);
+    private void renderLevelUpMenuQuads(GameWorld world) {
+        renderer.drawQuad(width / 2f, height / 2f, width, height, 0f, 0f, 0f, UIConstants.LEVEL_UP_BG_ALPHA);
 
-        float boxW = 220f, boxH = 280f, gap = 20f;
+        float boxW = UIConstants.LEVEL_UP_BOX_WIDTH;
+        float boxH = UIConstants.LEVEL_UP_BOX_HEIGHT;
+        float gap = UIConstants.LEVEL_UP_BOX_GAP;
         float centerX = width / 2f, startY = height / 2f;
 
         for (int i = 0; i < world.availableGadgets.size(); i++) {
             Gadget gadget = world.availableGadgets.get(i);
             float x = centerX + (i - (world.availableGadgets.size() - 1) / 2f) * (boxW + gap);
             
+            // Doboz quad
             renderer.drawQuad(x, startY, boxW, boxH, 0.2f, 0.4f, 0.8f, 1.0f);
 
-            // Text and level indicators
-            renderer.renderText(gadget.name, x - getTextWidth(gadget.name, 0.9f) / 2f, startY - boxH/2f + 20f, 0.9f, 1f, 1f, 1f, 1f);
-            
-            String effect = getNextLevelEffect(gadget);
-            renderer.renderText(effect, x - getTextWidth(effect, 0.7f)/2f, startY - boxH/2f + 80f, 0.7f, 0f, 1f, 0f, 1f);
-            
-            String texturePath = getGadgetTexturePath(gadget.name);
-            renderer.renderTexture(texturePath, x, startY + boxH/2f - 75, 64f, 64f);
             // Level squares
             int max = gadget.maxLevel;
-            float squareSize = 16f, squareGap = 6f;
+            float squareSize = UIConstants.LEVEL_UP_LEVEL_SQUARE_SIZE;
+            float squareGap = UIConstants.LEVEL_UP_LEVEL_SQUARE_GAP;
             float totalWidth = max * squareSize + (max - 1) * squareGap;
             float startSqX = x - totalWidth / 2f;
             for (int s = 0; s < max; s++) {
@@ -108,11 +126,39 @@ public class UIRenderer {
             }
         }
     }
-    
-    private float getTextWidth(String text, float scale) {
-        return text.length() * 10f * scale; // Approximate
+
+    private void renderLevelUpMenuImmediate(GameWorld world) {
+        // Cím
+        String title = "LEVEL UP! Choose a gadget:";
+        renderer.renderText(title, width / 2f - renderer.getTextWidth(title, UIConstants.LEVEL_UP_TITLE_SCALE) / 2f, 
+            UIConstants.LEVEL_UP_TITLE_Y, UIConstants.LEVEL_UP_TITLE_SCALE, 1f, 1f, 0f, 1f);
+
+        float boxW = UIConstants.LEVEL_UP_BOX_WIDTH;
+        float boxH = UIConstants.LEVEL_UP_BOX_HEIGHT;
+        float gap = UIConstants.LEVEL_UP_BOX_GAP;
+        float centerX = width / 2f, startY = height / 2f;
+
+        for (int i = 0; i < world.availableGadgets.size(); i++) {
+            Gadget gadget = world.availableGadgets.get(i);
+            float x = centerX + (i - (world.availableGadgets.size() - 1) / 2f) * (boxW + gap);
+
+            // Szövegek
+            renderer.renderText(gadget.name, x - renderer.getTextWidth(gadget.name, UIConstants.LEVEL_UP_BOX_TITLE_SCALE) / 2f, 
+                startY - boxH/2f + UIConstants.LEVEL_UP_BOX_TITLE_Y_OFFSET, UIConstants.LEVEL_UP_BOX_TITLE_SCALE, 1f, 1f, 1f, 1f);
+            
+            String effect = getNextLevelEffect(gadget);
+            renderer.renderText(effect, x - renderer.getTextWidth(effect, UIConstants.LEVEL_UP_BOX_EFFECT_SCALE)/2f, 
+                startY - boxH/2f + UIConstants.LEVEL_UP_BOX_EFFECT_Y_OFFSET, UIConstants.LEVEL_UP_BOX_EFFECT_SCALE, 0f, 1f, 0f, 1f);
+            
+            // Textúra
+            String texturePath = getGadgetTexturePath(gadget.name);
+            renderer.renderTexture(texturePath, x, startY + boxH/2f - UIConstants.LEVEL_UP_BOX_ICON_Y_FROM_BOTTOM, 
+                UIConstants.LEVEL_UP_BOX_ICON_SIZE, UIConstants.LEVEL_UP_BOX_ICON_SIZE);
+        }
     }
 
+    // --- SEGÉDFÜGGVÉNYEK (VÁLTOZATLAN) ---
+    
     private String getNextLevelEffect(Gadget gadget) {
         int nextLevel = gadget.level + 1;
         switch (gadget.name) {

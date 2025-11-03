@@ -21,6 +21,11 @@ public class Game {
     private GameWorld gameWorld;
     private Renderer renderer;
     private InputHandler inputHandler;
+    
+    public static final int TARGET_UPS = 60; 
+    public static final double FIXED_TIMESTEP = 1.0 / TARGET_UPS;
+
+    private double accumulator = 0.0;
 
     public static void main(String[] args) {
         System.out.println("Program elindult");
@@ -87,9 +92,14 @@ public class Game {
             double currentTime = glfwGetTime();
             float deltaTime = (float) (currentTime - lastTime);
             lastTime = currentTime;
-
+            
+            accumulator += deltaTime;
             inputHandler.processInput(gameWorld.getPlayer());
-            gameWorld.update(deltaTime);
+
+            while (accumulator >= FIXED_TIMESTEP) {
+                gameWorld.update((float) FIXED_TIMESTEP);
+                accumulator -= FIXED_TIMESTEP;
+            }
             renderer.render(gameWorld);
 
             glfwSwapBuffers(window);

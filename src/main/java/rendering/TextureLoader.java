@@ -2,7 +2,6 @@ package main.java.rendering;
 
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL30;
 import org.lwjgl.stb.STBImage;
 
 import java.nio.ByteBuffer;
@@ -68,8 +67,7 @@ public class TextureLoader {
             
             GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, textureWidth, textureHeight, 
                             0, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, imageBuffer);
-            
-            GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
+
             STBImage.stbi_image_free(imageBuffer);
             
             TextureInfo textureInfo = new TextureInfo(textureWidth, textureHeight, textureId);
@@ -85,11 +83,7 @@ public class TextureLoader {
     }
     
     public TextureInfo getTextureInfo(String texturePath) {
-        TextureInfo info = textureInfoCache.get(texturePath);
-        if (info == null) {
-            info = loadTexture(texturePath);
-        }
-        return info;
+    	return textureInfoCache.get(texturePath);
     }
     
     public boolean isTextureLoaded(String texturePath) {

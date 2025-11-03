@@ -28,10 +28,7 @@ public class GadgetSystem {
         updateLaser(dt);
     }
 
-    public void render(Renderer renderer) {
-        renderOrbitBlades(renderer);
-        renderLaserBullets(renderer);
-    }
+
 
     private void updateOrbitBlades(float dt) {
         int level = world.getGadgetLevel("Orbit Blade");
@@ -86,7 +83,7 @@ public class GadgetSystem {
 
 
     
-    private void renderOrbitBlades(Renderer renderer) {
+    public void renderOrbitBlades(Renderer renderer) {
         int level = world.getGadgetLevel("Orbit Blade");
         if (level <= 0) return;
         String texturePath = "src/main/assets/blade.png";
@@ -126,7 +123,7 @@ public class GadgetSystem {
         }
     }
     
-    private void renderLaserBullets(Renderer renderer) {
+    public void renderLaserBullets(Renderer renderer) {
         for (Bullet b : world.getBullets()) {
             if (b instanceof LaserBullet) {
                 renderer.drawQuad(b.x, b.y, b.size * 2.4f, b.size * 2.4f, 1.0f, 0.2f, 0.2f, 0.22f); // Glow
@@ -134,4 +131,6 @@ public class GadgetSystem {
             }
         }
     }
+
+
 }
