@@ -8,7 +8,7 @@ public class UIConstants {
     public static final float HUD_SCORE_Y = 40f;
     public static final float HUD_TIMER_PADDING_X = 20f;
     
-    public static final float XP_BAR_LEVEL_TEXT_Y = 18f;
+    public static final float XP_BAR_LEVEL_TEXT_Y = 30f;
     public static final float XP_BAR_Y_OFFSET = 26f;
     public static final float XP_BAR_WIDTH = 220f;
     public static final float XP_BAR_HEIGHT = 18f;
@@ -28,10 +28,10 @@ public class UIConstants {
     public static final float LEVEL_UP_TITLE_SCALE = 1.2f;
     
     public static final float LEVEL_UP_BOX_WIDTH = 220f;
-    public static final float LEVEL_UP_BOX_HEIGHT = 280f;
+    public static final float LEVEL_UP_BOX_HEIGHT = 300f;
     public static final float LEVEL_UP_BOX_GAP = 20f;
 
-    public static final float LEVEL_UP_BOX_TITLE_Y_OFFSET = 20f;
+    public static final float LEVEL_UP_BOX_TITLE_Y_OFFSET = 30f;
     public static final float LEVEL_UP_BOX_TITLE_SCALE = 0.9f;
     
     public static final float LEVEL_UP_BOX_EFFECT_Y_OFFSET = 80f;

@@ -25,8 +25,7 @@ public class UIRenderer {
 
     public void renderImmediate(GameWorld world, float camLeft, float camTop) {
         renderHUDImmediate(world);
-        renderGadgetsInfo(world); // Ez csak szöveget rajzol
-        renderFloatingTexts(world, camLeft, camTop); // Ez csak szöveget rajzol
+        renderFloatingTexts(world, camLeft, camTop); 
         if (world.levelUpMenuActive) {
             renderLevelUpMenuImmediate(world);
         }
@@ -69,23 +68,8 @@ public class UIRenderer {
             UIConstants.XP_BAR_LEVEL_TEXT_Y, 1.0f, 1f, 1f, 1f, 1f);
     }
     
-    // --- VÁLTOZATLAN METÓDUSOK (MÁR MOST IS CSAK AZONNALIAK) ---
 
-    private void renderGadgetsInfo(GameWorld world) {
-        float startY = height - UIConstants.GADGET_LIST_Y_FROM_BOTTOM;
-        renderer.renderText("Gadgets:", UIConstants.GADGET_LIST_X, startY, 
-            UIConstants.GADGET_LIST_TITLE_SCALE, 1f, 1f, 1f, 1f);
-        int drawn = 0;
-        for (Gadget g : world.getGadgets()) {
-            if (g.level > 0) {
-                String text = g.name + ": " + g.level + "/" + g.maxLevel;
-                renderer.renderText(text, UIConstants.GADGET_LIST_X, 
-                    startY + (drawn + 1) * UIConstants.GADGET_LIST_LINE_HEIGHT, 
-                    UIConstants.GADGET_LIST_ITEM_SCALE, 0.8f, 0.8f, 0.8f, 1f);
-                drawn++;
-            }
-        }
-    }
+
     
     private void renderFloatingTexts(GameWorld world, float camLeft, float camTop) {
         if (world.levelUpMenuActive) return;
@@ -104,13 +88,14 @@ public class UIRenderer {
         float boxH = UIConstants.LEVEL_UP_BOX_HEIGHT;
         float gap = UIConstants.LEVEL_UP_BOX_GAP;
         float centerX = width / 2f, startY = height / 2f;
+        float startBoxY = startY - 10f;
 
         for (int i = 0; i < world.availableGadgets.size(); i++) {
             Gadget gadget = world.availableGadgets.get(i);
             float x = centerX + (i - (world.availableGadgets.size() - 1) / 2f) * (boxW + gap);
             
             // Doboz quad
-            renderer.drawQuad(x, startY, boxW, boxH, 0.2f, 0.4f, 0.8f, 1.0f);
+            renderer.drawQuad(x, startY, boxW, boxH, 0.4f, 0.4f, 0.4f, 1.0f);
 
             // Level squares
             int max = gadget.maxLevel;
@@ -120,9 +105,9 @@ public class UIRenderer {
             float startSqX = x - totalWidth / 2f;
             for (int s = 0; s < max; s++) {
                 float sx = startSqX + s * (squareSize + squareGap) + squareSize/2f;
-                if (s < gadget.level) renderer.drawQuad(sx, startY, squareSize, squareSize, 1.0f, 0.85f, 0.05f, 1.0f);
-                else if (s == gadget.level) renderer.drawQuad(sx, startY, squareSize, squareSize, 1.0f, 0.85f, 0.05f, 0.4f);
-                else renderer.drawQuad(sx, startY, squareSize, squareSize, 0.05f, 0.05f, 0.05f, 1.0f);
+                if (s < gadget.level) renderer.drawQuad(sx, startBoxY, squareSize, squareSize, 1.0f, 0.85f, 0.05f, 1.0f);
+                else if (s == gadget.level) renderer.drawQuad(sx, startBoxY, squareSize, squareSize, 1.0f, 0.85f, 0.05f, 0.4f);
+                else renderer.drawQuad(sx, startBoxY, squareSize, squareSize, 0.05f, 0.05f, 0.05f, 1.0f);
             }
         }
     }

@@ -210,13 +210,13 @@ public class Renderer {
 
         drawGrid(world);
         drawXPOrbs(world);
-        drawPlayer(world.getPlayer());
-        drawEnemies(world);
         drawBullets(world);
+        drawHealthBar(world);
         world.getGadgetSystem().renderLaserBullets(this);
 
         flushColorBatch();
-
+        drawPlayer(world.getPlayer());
+        drawEnemies(world);
         world.getGadgetSystem().renderOrbitBlades(this);
         
         glBindVertexArray(0);
@@ -266,6 +266,10 @@ public class Renderer {
             textureLoader.loadTexture("src/main/assets/multishot.png");
             textureLoader.loadTexture("src/main/assets/heart_half.png");
             textureLoader.loadTexture("src/main/assets/laser.png");
+            textureLoader.loadTexture("src/main/assets/tiny.png");
+            textureLoader.loadTexture("src/main/assets/tank.png");
+            textureLoader.loadTexture("src/main/assets/normal.png");
+            textureLoader.loadTexture("src/main/assets/player.png");
             
             System.out.println("All textures pre-loaded.");
         } catch (Exception e) {
@@ -381,19 +385,22 @@ public class Renderer {
     }
     
     private void drawPlayer(Player player) {
-        drawQuad(player.x, player.y, player.size, player.size, 0.2f, 0.9f, 0.2f, 1.0f);
-        renderHealthBar(player);
+    	renderTextureInWorld("src/main/assets/player.png", player.x, player.y, player.size, player.size);
     }
     
     private void drawEnemies(GameWorld world) {
         for (Enemy enemy : world.getEnemies()) {
-            float r=0,g=0,b=0;
             switch (enemy.type) {
-                case BASIC: r=0.9f; g=0.2f; b=0.2f; break;
-                case FAST:  r=0.2f; g=0.9f; b=0.9f; break;
-                case TANK:  r=0.5f; g=0.5f; b=0.2f; break;
+                case BASIC: renderTextureInWorld("src/main/assets/normal.png", enemy.x, enemy.y, enemy.size, enemy.size); break;
+                case FAST:  renderTextureInWorld("src/main/assets/tiny.png", enemy.x, enemy.y, enemy.size, enemy.size);; break;
+                case TANK:  renderTextureInWorld("src/main/assets/tank.png", enemy.x, enemy.y, enemy.size, enemy.size); break;
             }
-            drawQuad(enemy.x, enemy.y, enemy.size, enemy.size, r,g,b,1.0f);
+        }
+    }
+    
+    private void drawHealthBar(GameWorld world) {
+        renderHealthBar(world.getPlayer());
+    	for (Enemy enemy : world.getEnemies()) {
             renderHealthBar(enemy);
         }
     }
