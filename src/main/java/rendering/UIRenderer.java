@@ -3,6 +3,7 @@ package main.java.rendering;
 import main.java.entities.FloatingText;
 import main.java.systems.Gadget;
 import main.java.world.GameWorld;
+import main.java.entities.BossEnemy;
 
 public class UIRenderer {
     private final Renderer renderer;
@@ -47,7 +48,48 @@ public class UIRenderer {
             renderer.drawQuad(barX + fillW/2f, barY + barH/2f, fillW, barH - UIConstants.XP_BAR_INSET, 
                 0.2f + percent * 1.2f, 0.9f - percent * 0.2f, 0.05f, 1f);
         }
+        renderBossHealthBar(world);
     }
+    
+    private void renderBossHealthBar(GameWorld world) {
+        BossEnemy boss = world.getEnemies().stream()
+                .filter(e -> e instanceof BossEnemy)
+                .map(e -> (BossEnemy) e)
+                .findFirst()
+                .orElse(null);
+
+        if (boss == null) return;
+
+        float healthPercent = Math.max(0f, Math.min(1f, (float) boss.hp / boss.maxHp));
+
+        // --- A "Level: 1" sáv alá tesszük ---
+        float barWidth = width * 0.5f;
+        float barHeight = 10f;
+        float centerX = width / 2f;
+
+        // XP bar alatt kb. 30 pixellel
+        float xpBarBottom = UIConstants.XP_BAR_LEVEL_TEXT_Y + 40f;
+        float centerY = xpBarBottom + 25f;
+
+        // --- Szín (zöld → sárga → piros) ---
+        float r = Math.min(1f, (1f - healthPercent) * 2f);
+        float g = Math.min(1f, healthPercent * 2f);
+        float b = 0.1f;
+
+        // Háttér (sötétszürke keret)
+        renderer.drawQuad(centerX, centerY, barWidth, barHeight + 2f, 0.1f, 0.1f, 0.1f, 1f);
+
+        // HP kitöltés
+        renderer.drawQuad(centerX - (barWidth - barWidth * healthPercent) / 2f,
+                centerY, barWidth * healthPercent, barHeight, r, g, b, 1f);
+
+        // Szöveg a csík alá
+        String text = "BOSS HP: " + (int) boss.hp + " / " + (int) boss.maxHp;
+        float textWidth = renderer.getTextWidth(text, 1.0f);
+        renderer.renderText(text, centerX - textWidth / 2f, centerY + 26f, 1.0f, 1f, 1f, 1f, 1f);
+    }
+
+
 
     private void renderHUDImmediate(GameWorld world) {
         // Score (Csak a szöveg)

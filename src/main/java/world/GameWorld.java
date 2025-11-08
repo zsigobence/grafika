@@ -30,6 +30,9 @@ public class GameWorld {
     private double enemySpawnTimer = 0.0;
     private float baseEnemySpawnInterval = 0.9f;
     private float enemySpawnInterval = baseEnemySpawnInterval;
+    
+    private double bossSpawnTimer = 0.0;
+    private double bossSpawnInterval = 60.0; // új boss minden 60 mp-ben
 
     private List<Gadget> gadgets = new ArrayList<>();
     public List<Gadget> availableGadgets = new ArrayList<>();
@@ -108,7 +111,43 @@ public class GameWorld {
             spawned.hp = spawned.maxHp;
             enemies.add(spawned);
         }
+        bossSpawnTimer += deltaTime;
+
+	     // Boss spawn logika: új boss minden bossSpawnInterval idő után
+	     if (bossSpawnTimer >= bossSpawnInterval) {
+	         bossSpawnTimer = 0.0;
+	         long activeBosses = enemies.stream().filter(e -> e instanceof BossEnemy).count();
+	         if (activeBosses < 3) {
+	             // Spawn pozíció (véletlenszerű körben a játékos körül)
+	             double angle = Math.random() * Math.PI * 2.0;
+	             float bossSpawnRadius = 400f + (float)(Math.random() * 400f);
+	             float bx = (float)(player.x + Math.cos(angle) * bossSpawnRadius);
+	             float by = (float)(player.y + Math.sin(angle) * bossSpawnRadius);
+	
+	             bx = Math.max(50, Math.min(worldWidth - 50, bx));
+	             by = Math.max(50, Math.min(worldHeight - 50, by));
+	
+	             double roll = Math.random();
+	             BossEnemy.BossType bossType;
+
+	             if (roll < 0.33) bossType = BossEnemy.BossType.GHOST;
+	             else if (roll < 0.66) bossType = BossEnemy.BossType.DEMON;
+	             else bossType = BossEnemy.BossType.DRAGON;
+
+	             BossEnemy boss = new BossEnemy(bx, by, EnemyType.TANK, this, bossType);
+	
+	             // Kicsit erősebbek legyenek az újabb bossok
+	             int bossCount = (int)(elapsedTime / bossSpawnInterval);
+	             boss.maxHp *= 1f + 0.2f * bossCount; // enyhébb növekedés
+	             boss.hp = boss.maxHp;
+	
+	             enemies.add(boss);
+	             System.out.println("Boss spawned! Total bosses so far: " + (bossCount + 1));
+	         }
+	     }
+
     }
+    
     
     private void updateEnemies(float deltaTime) {
         Iterator<Enemy> enemyIterator = enemies.iterator();
@@ -120,15 +159,10 @@ public class GameWorld {
             Iterator<Bullet> bulletIter = bullets.iterator();
             while (bulletIter.hasNext()) {
                 Bullet b = bulletIter.next();
-                if (checkCollision(enemy, b)) {
-                    if (b instanceof LaserBullet) {
-                        ((LaserBullet) b).onHit(enemy);
-                        if (((LaserBullet) b).pierce <= 0) bulletIter.remove();
-                    } else {
-                        enemy.takeDamage(player.damage);
-                        SoundManager.playOverlap("damage");
-                        bulletIter.remove();
-                    }
+                if (b.owner == Bullet.Owner.PLAYER && checkCollision(enemy, b)) {
+                    enemy.takeDamage(player.damage);
+                    SoundManager.playOverlap("damage");
+                    bulletIter.remove();
 
                     if (enemy.isDead()) {
                         handleEnemyDeath(enemy);
@@ -137,20 +171,47 @@ public class GameWorld {
                     }
                 }
             }
+
             if (enemy.isDead()) continue;
 
             // Enemy-Player collision
             if (checkCollision(enemy, player)) {
-                player.takeDamage(1);
-                handleEnemyDeath(enemy); 
-                enemyIterator.remove();
+                if (enemy instanceof BossEnemy) {
+                    player.takeDamage(5);
+                    System.out.println("Player was slain by the Boss!");
+                    SoundManager.playOverlap("damage");
+                    gameOver = true;
+                } else {
+                    player.takeDamage(1);
+                    handleEnemyDeath(enemy);
+                    enemyIterator.remove();
+                }
+
                 if (player.isDead()) {
                     System.out.println("Game Over!");
                     gameOver = true;
                 }
             }
         }
+
+        // --- Enemy bullets hitting player ---
+        Iterator<Bullet> enemyBullets = bullets.iterator();
+        while (enemyBullets.hasNext()) {
+            Bullet b = enemyBullets.next();
+            if (b.owner == Bullet.Owner.ENEMY && checkCollision(player, b)) {
+                player.takeDamage(1);
+                SoundManager.playOverlap("damage");
+                enemyBullets.remove();
+
+                if (player.isDead()) {
+                    System.out.println("Game Over!");
+                    gameOver = true;
+                    break;
+                }
+            }
+        }
     }
+
     
     private void handleEnemyDeath(Enemy enemy) {
         xpOrbs.add(new XPOrb(enemy.x, enemy.y, enemy.getXp()));

@@ -90,11 +90,18 @@ public class Renderer {
         "}";
 
     private static final String textureFragmentShaderSource =
-        "#version 330 core\n" +
-        "in vec2 TexCoord;\n" +
-        "out vec4 FragColor;\n" +
-        "uniform sampler2D uTexture;\n" +
-        "void main() { FragColor = texture(uTexture, TexCoord); }";
+    	    "#version 330 core\n" +
+    	    "in vec2 TexCoord;\n" +
+    	    "out vec4 FragColor;\n" +
+    	    "uniform sampler2D uTexture;\n" +
+    	    "uniform vec4 uTint;\n" +
+    	    "void main() {\n" +
+    	    "    vec4 texColor = texture(uTexture, TexCoord);\n" +
+    	    "    // Ha nincs uTint beállítva, legyen automatikusan fehér (1.0)\n" +
+    	    "    vec4 tint = (uTint.a == 0.0 && uTint.rgb == vec3(0.0)) ? vec4(1.0) : uTint;\n" +
+    	    "    FragColor = vec4(texColor.rgb * tint.rgb, texColor.a * tint.a);\n" +
+    	    "}";
+
 
 
     public Renderer(int width, int height) {
@@ -270,6 +277,9 @@ public class Renderer {
             textureLoader.loadTexture("src/main/assets/tank.png");
             textureLoader.loadTexture("src/main/assets/normal.png");
             textureLoader.loadTexture("src/main/assets/player.png");
+            textureLoader.loadTexture("src/main/assets/ghost.png");
+            textureLoader.loadTexture("src/main/assets/demon.png");
+            textureLoader.loadTexture("src/main/assets/dragon.png");
             
             System.out.println("All textures pre-loaded.");
         } catch (Exception e) {
@@ -288,6 +298,8 @@ public class Renderer {
         // Textúra shader használata
         glUseProgram(textureProgram);
         glBindVertexArray(textureVAO);
+        
+        glUniform4f(glGetUniformLocation(textureProgram, "uTint"), 1f, 1f, 1f, 1f);
         
         // Projection beállítása (UI mód)
         glUniformMatrix4fv(texUniProjection, false, ortho(0, this.width, this.height, 0, -1.0f, 1.0f));
@@ -343,6 +355,8 @@ public class Renderer {
         glUseProgram(textureProgram);
         glBindVertexArray(textureVAO);
         
+        glUniform4f(glGetUniformLocation(textureProgram, "uTint"), 1f, 1f, 1f, 1f);
+        
         // FONTOS: Világ projekció használata (nem UI projekció)
         glUniformMatrix4fv(texUniProjection, false, ortho(camLeft, camLeft + this.width, camTop + this.height, camTop, -1.0f, 1.0f));
         
@@ -390,13 +404,84 @@ public class Renderer {
     
     private void drawEnemies(GameWorld world) {
         for (Enemy enemy : world.getEnemies()) {
-            switch (enemy.type) {
-                case BASIC: renderTextureInWorld("src/main/assets/normal.png", enemy.x, enemy.y, enemy.size, enemy.size); break;
-                case FAST:  renderTextureInWorld("src/main/assets/tiny.png", enemy.x, enemy.y, enemy.size, enemy.size);; break;
-                case TANK:  renderTextureInWorld("src/main/assets/tank.png", enemy.x, enemy.y, enemy.size, enemy.size); break;
+        	if (enemy instanceof BossEnemy boss) {
+        	    String texturePath = switch (boss.getBossType()) {
+        	        case GHOST -> "src/main/assets/ghost.png";
+        	        case DEMON -> "src/main/assets/demon.png";
+        	        case DRAGON -> "src/main/assets/dragon.png";
+        	    };
+
+        	    float tintR = 1f, tintG = 1f, tintB = 1f, tintA = 1f;
+
+        	    // Fázis alap szín
+        	    switch (boss.getPhase()) {
+        	        case 1 -> { tintR = 1f; tintG = 1f; tintB = 1f; }
+        	        case 2 -> { tintR = 1f; tintG = 0.7f; tintB = 0.7f; }
+        	        case 3 -> { tintR = 1f; tintG = 0.3f; tintB = 0.3f; }
+        	    }
+
+        	    // Villanás (általános)
+        	    if (boss.getFlashTimer() > 0) {
+        	        float pulse = (float) Math.sin(boss.getFlashTimer() * 25f);
+        	        float intensity = 0.8f + 0.2f * Math.abs(pulse);
+        	        tintR *= intensity;
+        	        tintG *= intensity;
+        	        tintB *= intensity;
+        	    }
+
+        	    // 👻 GHOST speciális fade effekt
+        	    if (boss.getBossType() == BossEnemy.BossType.GHOST) {
+        	        float fadeCycle = (float) Math.sin(System.currentTimeMillis() * 0.003);
+        	        tintA = 0.7f + 0.3f * fadeCycle; // lebegés
+
+        	        // 👻 Teleport alatt tűnjön el
+        	        if (boss.isTeleporting()) {
+        	        	float progress = boss.getFlashTimer() / 0.6f; // 0–1 között
+        	            tintA = Math.max(0.1f, progress); // fokozatos eltűnés
+        	        }
+
+        	        // 👻 Flash alatt villogjon (eltűnés/megérkezéskor)
+        	        if (boss.getFlashTimer() > 0) {
+        	            tintA = Math.abs((float) Math.sin(boss.getFlashTimer() * (float)Math.PI));
+        	        }
+        	    }
+
+
+        	    renderTextureTinted(texturePath, boss.x, boss.y, boss.size, boss.size, tintR, tintG, tintB, tintA);
+        	}
+            else {
+                // Normál enemy
+                switch (enemy.type) {
+                    case BASIC -> renderTextureInWorld("src/main/assets/normal.png", enemy.x, enemy.y, enemy.size, enemy.size);
+                    case FAST  -> renderTextureInWorld("src/main/assets/tiny.png", enemy.x, enemy.y, enemy.size, enemy.size);
+                    case TANK  -> renderTextureInWorld("src/main/assets/tank.png", enemy.x, enemy.y, enemy.size, enemy.size);
+                }
             }
         }
     }
+
+    public void renderTextureTinted(String texturePath, float centerX, float centerY, float width, float height,
+            						float r, float g, float b, float a) {
+		TextureLoader.TextureInfo textureInfo = textureLoader.getTextureInfo(texturePath);
+		if (textureInfo == null) return;
+		
+		glUseProgram(textureProgram);
+		glBindVertexArray(textureVAO);
+		
+		glUniformMatrix4fv(texUniProjection, false, ortho(camLeft, camLeft + this.width, camTop + this.height, camTop, -1.0f, 1.0f));
+		glUniformMatrix4fv(texUniModel, false, createModelMatrix(centerX, centerY, width, height));
+		
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, textureInfo.textureId);
+		glUniform1i(texUniTexture, 0);
+		
+		// Színtónus shader paraméterként (új változó, beállítható a shaderbe)
+		glUniform4f(glGetUniformLocation(textureProgram, "uTint"), r, g, b, a);
+		
+		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+		glBindTexture(GL_TEXTURE_2D, 0);
+    }	
+
     
     private void drawHealthBar(GameWorld world) {
         renderHealthBar(world.getPlayer());
