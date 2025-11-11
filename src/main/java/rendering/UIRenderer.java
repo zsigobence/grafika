@@ -1,6 +1,7 @@
 package main.java.rendering;
 
 import main.java.entities.FloatingText;
+import main.java.systems.GadgetSystem;
 import main.java.systems.Gadget;
 import main.java.world.GameWorld;
 import main.java.entities.BossEnemy;
@@ -16,19 +17,35 @@ public class UIRenderer {
     }
 
 
+    /**
+     * 1. LÉPÉS: Csak a színes quad-ok kirajzolása (Color Batch)
+     */
     public void renderQuads(GameWorld world) {
         renderHUDQuads(world);
         if (world.levelUpMenuActive) {
             renderLevelUpMenuQuads(world);
         }
     }
+    
+    /**
+     * 2. LÉPÉS: Csak a textúrák kirajzolása (Texture Batch)
+     */
+    public void renderTextures(GameWorld world) {
+        renderHUDTextures(world);
+        if (world.levelUpMenuActive) {
+            renderLevelUpMenuTextures(world);
+        }
+    }
 
 
-    public void renderImmediate(GameWorld world, float camLeft, float camTop) {
-        renderHUDImmediate(world);
+    /**
+     * 3. LÉPÉS: Csak a szöveg kirajzolása (Immediate Mode)
+     */
+    public void renderText(GameWorld world, float camLeft, float camTop) {
+        renderHUDText(world);
         renderFloatingTexts(world, camLeft, camTop); 
         if (world.levelUpMenuActive) {
-            renderLevelUpMenuImmediate(world);
+            renderLevelUpMenuText(world);
         }
     }
 
@@ -51,47 +68,24 @@ public class UIRenderer {
         renderBossHealthBar(world);
     }
     
-    private void renderBossHealthBar(GameWorld world) {
-        BossEnemy boss = world.getEnemies().stream()
-                .filter(e -> e instanceof BossEnemy)
-                .map(e -> (BossEnemy) e)
-                .findFirst()
-                .orElse(null);
+    private void renderHUDTextures(GameWorld world) {
+        // Magnet Ikon (Csak a textúra)
+        float iconSize = 64.0f; // Ikon mérete
+        float padding = 20.0f;  // Távolság a szélektől
 
-        if (boss == null) return;
-
-        float healthPercent = Math.max(0f, Math.min(1f, (float) boss.hp / boss.maxHp));
-
-        // --- A "Level: 1" sáv alá tesszük ---
-        float barWidth = width * 0.5f;
-        float barHeight = 10f;
-        float centerX = width / 2f;
-
-        // XP bar alatt kb. 30 pixellel
-        float xpBarBottom = UIConstants.XP_BAR_LEVEL_TEXT_Y + 40f;
-        float centerY = xpBarBottom + 25f;
-
-        // --- Szín (zöld → sárga → piros) ---
-        float r = Math.min(1f, (1f - healthPercent) * 2f);
-        float g = Math.min(1f, healthPercent * 2f);
-        float b = 0.1f;
-
-        // Háttér (sötétszürke keret)
-        renderer.drawQuad(centerX, centerY, barWidth, barHeight + 2f, 0.1f, 0.1f, 0.1f, 1f);
-
-        // HP kitöltés
-        renderer.drawQuad(centerX - (barWidth - barWidth * healthPercent) / 2f,
-                centerY, barWidth * healthPercent, barHeight, r, g, b, 1f);
-
-        // Szöveg a csík alá
-        String text = "BOSS HP: " + (int) boss.hp + " / " + (int) boss.maxHp;
-        float textWidth = renderer.getTextWidth(text, 1.0f);
-        renderer.renderText(text, centerX - textWidth / 2f, centerY + 26f, 1.0f, 1f, 1f, 1f, 1f);
+        // Pozíció (középpont): Jobb alsó sarok
+        float iconCenterX = width - padding - iconSize / 2f;
+        float iconCenterY = height - padding - iconSize / 2f;
+        
+        float cooldown = GadgetSystem.getMagnetCooldown();
+        if (cooldown > 0) {
+            renderer.renderTexture("src/main/assets/magnet.png", iconCenterX, iconCenterY, iconSize, iconSize, 0.3f);
+        } else {
+            renderer.renderTexture("src/main/assets/magnet.png", iconCenterX, iconCenterY, iconSize, iconSize, 1f);
+        }
     }
-
-
-
-    private void renderHUDImmediate(GameWorld world) {
+    
+    private void renderHUDText(GameWorld world) {
         // Score (Csak a szöveg)
         renderer.renderText("Score: " + world.score, 
             UIConstants.HUD_PADDING_X, UIConstants.HUD_SCORE_Y, 1.0f, 1f,1f,1f,1f);
@@ -108,10 +102,54 @@ public class UIRenderer {
         float levelTextWidth = renderer.getTextWidth(levelText, 1.0f);
         renderer.renderText(levelText, width / 2f - levelTextWidth / 2f, 
             UIConstants.XP_BAR_LEVEL_TEXT_Y, 1.0f, 1f, 1f, 1f, 1f);
+        
+        // Magnet Cooldown (Csak a szöveg)
+        float iconSize = 64.0f;
+        float padding = 20.0f;
+        float iconCenterX = width - padding - iconSize / 2f;
+        float iconCenterY = height - padding - iconSize / 2f;
+        
+        float cooldown = GadgetSystem.getMagnetCooldown();
+        if (cooldown > 0) {
+            String cooldownText = String.format("%d", (int) Math.ceil(cooldown));
+            float textWidth = renderer.getTextWidth(cooldownText, 1.0f);
+            renderer.renderText(cooldownText, iconCenterX - textWidth / 2f, iconCenterY + 10f, 1.0f, 1f, 1f, 1f, 1f);
+        }
     }
     
+    private void renderBossHealthBar(GameWorld world) {
+        BossEnemy boss = world.getEnemies().stream()
+                .filter(e -> e instanceof BossEnemy)
+                .map(e -> (BossEnemy) e)
+                .findFirst()
+                .orElse(null);
 
+        if (boss == null) return;
 
+        float healthPercent = Math.max(0f, Math.min(1f, (float) boss.hp / boss.maxHp));
+        float barWidth = width * 0.5f;
+        float barHeight = 10f;
+        float centerX = width / 2f;
+        float xpBarBottom = UIConstants.XP_BAR_LEVEL_TEXT_Y + 40f;
+        float centerY = xpBarBottom + 25f;
+
+        float r = Math.min(1f, (1f - healthPercent) * 2f);
+        float g = Math.min(1f, healthPercent * 2f);
+        float b = 0.1f;
+
+        // Háttér
+        renderer.drawQuad(centerX, centerY, barWidth, barHeight + 2f, 0.1f, 0.1f, 0.1f, 1f);
+        // HP kitöltés
+        renderer.drawQuad(centerX - (barWidth - barWidth * healthPercent) / 2f,
+                centerY, barWidth * healthPercent, barHeight, r, g, b, 1f);
+
+        // Szöveg a csík alá - EZT ÁT KELLENE HELYEZNI A renderHUDText-be!
+        // De mivel a renderBossHealthBar a renderHUDQuads-ból hívódik, 
+        // a szöveget is itt rajzoljuk ki (mivel a renderText immediate módú).
+        String text = "BOSS HP: " + (int) boss.hp + " / " + (int) boss.maxHp;
+        float textWidth = renderer.getTextWidth(text, 1.0f);
+        renderer.renderText(text, centerX - textWidth / 2f, centerY + 26f, 1.0f, 1f, 1f, 1f, 1f);
+    }
     
     private void renderFloatingTexts(GameWorld world, float camLeft, float camTop) {
         if (world.levelUpMenuActive) return;
@@ -153,8 +191,25 @@ public class UIRenderer {
             }
         }
     }
+    
+    private void renderLevelUpMenuTextures(GameWorld world) {
+        float boxW = UIConstants.LEVEL_UP_BOX_WIDTH;
+        float boxH = UIConstants.LEVEL_UP_BOX_HEIGHT;
+        float gap = UIConstants.LEVEL_UP_BOX_GAP;
+        float centerX = width / 2f, startY = height / 2f;
 
-    private void renderLevelUpMenuImmediate(GameWorld world) {
+        for (int i = 0; i < world.availableGadgets.size(); i++) {
+            Gadget gadget = world.availableGadgets.get(i);
+            float x = centerX + (i - (world.availableGadgets.size() - 1) / 2f) * (boxW + gap);
+            
+            // Textúra
+            String texturePath = getGadgetTexturePath(gadget.name);
+            renderer.renderTexture(texturePath, x, startY + boxH/2f - UIConstants.LEVEL_UP_BOX_ICON_Y_FROM_BOTTOM, 
+                UIConstants.LEVEL_UP_BOX_ICON_SIZE, UIConstants.LEVEL_UP_BOX_ICON_SIZE);
+        }
+    }
+
+    private void renderLevelUpMenuText(GameWorld world) {
         // Cím
         String title = "LEVEL UP! Choose a gadget:";
         renderer.renderText(title, width / 2f - renderer.getTextWidth(title, UIConstants.LEVEL_UP_TITLE_SCALE) / 2f, 
@@ -176,11 +231,6 @@ public class UIRenderer {
             String effect = getNextLevelEffect(gadget);
             renderer.renderText(effect, x - renderer.getTextWidth(effect, UIConstants.LEVEL_UP_BOX_EFFECT_SCALE)/2f, 
                 startY - boxH/2f + UIConstants.LEVEL_UP_BOX_EFFECT_Y_OFFSET, UIConstants.LEVEL_UP_BOX_EFFECT_SCALE, 0f, 1f, 0f, 1f);
-            
-            // Textúra
-            String texturePath = getGadgetTexturePath(gadget.name);
-            renderer.renderTexture(texturePath, x, startY + boxH/2f - UIConstants.LEVEL_UP_BOX_ICON_Y_FROM_BOTTOM, 
-                UIConstants.LEVEL_UP_BOX_ICON_SIZE, UIConstants.LEVEL_UP_BOX_ICON_SIZE);
         }
     }
 
@@ -189,10 +239,10 @@ public class UIRenderer {
     private String getNextLevelEffect(Gadget gadget) {
         int nextLevel = gadget.level + 1;
         switch (gadget.name) {
-            case "Attack Damage": return "Damage: +" + gadget.level + " -> +" + nextLevel;
+            case "Attack Damage": return "Damage: +" + gadget.level + " -> +" + 2 * nextLevel;
             case "Attack Speed": return "Speed: +" + (gadget.level * 20) + "% -> +" + (nextLevel * 20) + "%";
-            case "Max HP": return "Max HP: +" + gadget.level + " -> +" + nextLevel;
-            case "Movement Speed": return "Speed: +" + (gadget.level * 10) + "% -> +" + (nextLevel * 10) + "%";
+            case "Max HP": return "Max HP: +" + gadget.level + " -> +" + 2 * nextLevel;
+            case "Movement Speed": return "Speed: +" + (gadget.level * 10) + "% -> +" + (nextLevel * 20) + "%";
             case "Multi Attack": return "Projectiles: " + (gadget.level + 1) + " -> " + (nextLevel + 1);
             case "Life Steal": return "Chance: " + (gadget.level * 3) + "% -> " + (nextLevel * 3) + "%";
             case "Orbit Blade": return "Blades: " + (2 + gadget.level) + " -> " + (2 + nextLevel);

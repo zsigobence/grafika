@@ -2,12 +2,13 @@ package main.java;
 
 import main.java.entities.Player;
 import main.java.systems.Gadget;
+import main.java.systems.GadgetSystem;
 import main.java.world.GameWorld;
 
 import static org.lwjgl.glfw.GLFW.*;
 
 public class InputHandler {
-    private boolean keyUp, keyDown, keyLeft, keyRight;
+    private boolean keyUp, keyDown, keyLeft, keyRight, keySpace;
     private final GameWorld gameWorld;
 
     public InputHandler(long window, GameWorld gameWorld) {
@@ -22,6 +23,7 @@ public class InputHandler {
             if (key == GLFW_KEY_S) keyDown = pressed;
             if (key == GLFW_KEY_A) keyLeft = pressed;
             if (key == GLFW_KEY_D) keyRight = pressed;
+            if (key == GLFW_KEY_SPACE) keySpace = pressed;
         });
 
         glfwSetMouseButtonCallback(window, (win, button, action, mods) -> {
@@ -42,6 +44,7 @@ public class InputHandler {
         if (keyDown) moveY += 1;
         if (keyLeft) moveX -= 1;
         if (keyRight) moveX += 1;
+        if (keySpace) GadgetSystem.activateMagnet(gameWorld);
 
         player.setMovementDirection(moveX, moveY);
     }

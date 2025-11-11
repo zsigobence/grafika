@@ -1,0 +1,110 @@
+package main.java.world;
+
+import main.java.audio.SoundManager;
+import main.java.entities.Enemy;
+import main.java.entities.FloatingText;
+import main.java.entities.Player;
+import main.java.entities.XPOrb;
+import main.java.systems.Gadget;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+public class LevelingSystem {
+
+    private final GameWorld world;
+    private final Player player;
+
+    public LevelingSystem(GameWorld world, Player player) {
+        this.world = world;
+        this.player = player;
+    }
+
+    /**
+     * Akkor hívódik, amikor egy ellenség meghal (CollisionSystem vagy GadgetSystem által).
+     * Felelős az XP orb létrehozásáért, a pontszám növeléséért és a Life Steal-ért.
+     */
+    public void onEnemyKilled(Enemy enemy) {
+        world.getXPOrbs().add(new XPOrb(enemy.x, enemy.y, enemy.getXp()));
+        // Helyesbítés: EnemyType lekérdezése az EnemyType enum-ból (ha nincs importálva)
+        // Mivel az Enemy-ben van 'type' mező, feltételezzük, hogy az EnemyType importálva van
+        // (Vagy az Enemy-ben kellene importálni: import main.java.entities.EnemyType;)
+        // A te esetedben az Enemy már importálta, így ez rendben van.
+        world.score += enemy.type == main.java.entities.EnemyType.TANK ? 30 : 10;
+        
+        int lsLevel = world.getGadgetLevel("Life Steal");
+        if (lsLevel > 0) {
+            float chance = lsLevel * 0.03f;
+            if (Math.random() < chance) {
+                player.heal(1);
+                world.getFloatingTexts().add(new FloatingText(player.x, player.y - 40, "+HP", 1.0f, -40f, 0.3f, 1f, 0.3f));
+            }
+        }
+    }
+
+    /**
+     * Akkor hívódik, amikor a CollisionSystem játékos-XP orb ütközést észlel.
+     * Felelős az XP növeléséért és a szintlépés indításáért.
+     */
+    public void onPlayerCollectedOrb(XPOrb orb) {
+        world.xp += orb.value;
+        world.getFloatingTexts().add(new FloatingText(player.x, player.y - player.size, "+" + orb.value, 1.2f, -40.0f, 1.0f, 1.0f, 0.2f));
+        SoundManager.playOverlap("xp");
+
+        if (world.xp >= world.xpToNext) {
+            levelUp();
+        }
+    }
+
+    /**
+     * A szintlépés teljes logikája.
+     */
+    private void levelUp() {
+        world.xp -= world.xpToNext;
+        world.level++;
+        world.xpToNext = calcXpForLevel(world.level);
+        world.getFloatingTexts().add(new FloatingText(player.x, player.y - player.size - 20, "Level Up!", 1.6f, -70.0f, 1.0f, 0.8f, 0.0f));
+        world.levelUpMenuActive = true;
+        SoundManager.play("levelup");
+        generateLevelUpOptions();
+    }
+
+    /**
+     * Legenerálja a 3 választható gadgetet a szintlépés menühöz.
+     */
+    private void generateLevelUpOptions() {
+        world.availableGadgets.clear();
+        List<Gadget> nonMaxGadgets = new ArrayList<>();
+        for (Gadget gadget : world.getGadgets()) {
+            if (gadget.level < gadget.maxLevel) {
+                nonMaxGadgets.add(gadget);
+            }
+        }
+        Collections.shuffle(nonMaxGadgets);
+        int count = Math.min(3, nonMaxGadgets.size());
+        for (int i = 0; i < count; i++) {
+            // ❗️ JAVÍTÁS ITT:
+            // A 'world.' referencia hiányzott.
+            world.availableGadgets.add(nonMaxGadgets.get(i));
+        }
+    }
+
+    /**
+     * Az InputHandler hívja meg, amikor a játékos kiválaszt egy gadgetet.
+     */
+    public void selectGadget(Gadget gadget) {
+        gadget.levelUp();
+        world.recomputePlayerStats();
+        world.levelUpMenuActive = false;
+        world.getFloatingTexts().add(new FloatingText(player.x, player.y, gadget.name + " +1", 1.5f, -50f, 0f, 1f, 0f));
+    }
+
+    /**
+     * Kiszámolja a következő szinthez szükséges XP-t.
+     */
+    private int calcXpForLevel(int lvl) {
+        double val = 100.0 * Math.pow(Math.min(1.45, 1.25 + lvl * 5), Math.max(0, lvl - 1));
+        return Math.max(20, (int) Math.round(val));
+    }
+}

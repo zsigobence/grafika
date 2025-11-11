@@ -6,7 +6,6 @@ import main.java.systems.Gadget;
 import main.java.systems.GadgetSystem;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
@@ -27,25 +26,39 @@ public class GameWorld {
     public int xpToNext = 50;
     
     public double elapsedTime = 0.0;
-    private double enemySpawnTimer = 0.0;
-    private float baseEnemySpawnInterval = 0.9f;
-    private float enemySpawnInterval = baseEnemySpawnInterval;
     
-    private double bossSpawnTimer = 0.0;
-    private double bossSpawnInterval = 60.0; // új boss minden 60 mp-ben
-
     private List<Gadget> gadgets = new ArrayList<>();
     public List<Gadget> availableGadgets = new ArrayList<>();
     public boolean levelUpMenuActive = false;
     private GadgetSystem gadgetSystem;
     private boolean gameOver = false;
 
+    // --- RENDSZEREK ---
+    private EnemySpawner enemySpawner;
+    private CollisionSystem collisionSystem;
+    private LevelingSystem levelingSystem;
+    private SpatialGrid spatialGrid; // <-- ÚJ: A rács referencia
+    
+    // Javasolt cellaméret (az ellenségek méretéhez igazítva)
+    private static final int GRID_CELL_SIZE = 200;
+
 
     public void init() {
         player = new Player(worldWidth / 2.0f, worldHeight / 2.0f, 10, 1, 250f);
         initGadgets();
         recomputePlayerStats();
+        
+        // Rendszerek inicializálása
+        
+        // 1. A Rács létrehozása
+        spatialGrid = new SpatialGrid(worldWidth, worldHeight, GRID_CELL_SIZE);
+        
+        // 2. Többi rendszer létrehozása (a rács átadásával)
+        enemySpawner = new EnemySpawner(this, player);
+        levelingSystem = new LevelingSystem(this, player);
+        collisionSystem = new CollisionSystem(this, player, levelingSystem, spatialGrid); // <-- MÓDOSÍTVA
         gadgetSystem = new GadgetSystem(this, player);
+        
         loadSounds();
     }
     
@@ -53,17 +66,38 @@ public class GameWorld {
         if (levelUpMenuActive) return;
 
         elapsedTime += deltaTime;
+        
+        // 1. Játékos és Gadgetek frissítése (Input alapján)
         player.update(deltaTime, enemies);
         if (player.isReadyToShoot()) {
             spawnPlayerBullets();
         }
-
-        updateBullets(deltaTime);
-        spawnEnemies(deltaTime);
-        updateEnemies(deltaTime);
-        updateXPOrbs(deltaTime);
-        updateFloatingTexts(deltaTime);
         gadgetSystem.update(deltaTime);
+
+        // 2. Entitások mozgatása és logikája (ÜTKÖZÉS NÉLKÜL)
+        updateBullets(deltaTime);
+        updateEnemies(deltaTime);
+        updateXPOrbs(deltaTime); // Ez már csak mozgatja az orbokat
+        updateFloatingTexts(deltaTime);
+        
+        // 3. Spawner futtatása (Új entitásokat hoz létre)
+        enemySpawner.update(deltaTime);
+        
+        // 4. ÚJ LÉPÉS: Rács feltöltése az aktuális pozíciókkal
+        spatialGrid.clear();
+        spatialGrid.insert(player);
+        for (Enemy e : enemies) {
+            spatialGrid.insert(e);
+        }
+        for (Bullet b : bullets) {
+            spatialGrid.insert(b);
+        }
+        for (XPOrb o : xpOrbs) {
+            spatialGrid.insert(o);
+        }
+        
+        // 5. Ütközések ellenőrzése (Ez már a gyors, rács-alapú rendszert használja)
+        collisionSystem.checkCollisions();
     }
     
     // Getter metódusok, hogy a Renderer és más osztályok hozzáférjenek az adatokhoz
@@ -75,205 +109,45 @@ public class GameWorld {
     public List<Gadget> getGadgets() { return gadgets; }
     public GadgetSystem getGadgetSystem() { return gadgetSystem; }
     public boolean isGameOver() { return gameOver; }
+    public void setGameOver(boolean gameOver) { this.gameOver = gameOver; }
 
+
+    /**
+     * Golyók frissítése (csak mozgás és pályaelhagyás).
+     */
     private void updateBullets(float deltaTime) {
         bullets.removeIf(b -> {
             b.update(deltaTime);
+            // Pálya elhagyás ellenőrzése (marad)
             return b.x < -50 || b.x > worldWidth + 50 || b.y < -50 || b.y > worldHeight + 50;
         });
     }
 
-    private void spawnEnemies(float deltaTime) {
-        // 🔒 Ne spawnoljon normál enemy, ha van legalább 1 boss a pályán
-        boolean bossPresent = enemies.stream().anyMatch(e -> e instanceof BossEnemy);
-        if (bossPresent) {
-            // Ha boss aktív, csak a boss timer frissüljön, de ne spawnoljon sima enemy-t
-            bossSpawnTimer += deltaTime;
-
-            // Ha még kevesebb, mint 3 boss van, idővel jöhet új
-            if (bossSpawnTimer >= bossSpawnInterval) {
-                bossSpawnTimer = 0.0;
-                long activeBosses = enemies.stream().filter(e -> e instanceof BossEnemy).count();
-
-                if (activeBosses < 3) {
-                    double angle = Math.random() * Math.PI * 2.0;
-                    float bossSpawnRadius = 400f + (float)(Math.random() * 400f);
-                    float bx = (float)(player.x + Math.cos(angle) * bossSpawnRadius);
-                    float by = (float)(player.y + Math.sin(angle) * bossSpawnRadius);
-                    bx = Math.max(50, Math.min(worldWidth - 50, bx));
-                    by = Math.max(50, Math.min(worldHeight - 50, by));
-
-                    double roll = Math.random();
-                    BossEnemy.BossType bossType;
-                    if (roll < 0.33) bossType = BossEnemy.BossType.GHOST;
-                    else if (roll < 0.66) bossType = BossEnemy.BossType.DEMON;
-                    else bossType = BossEnemy.BossType.DRAGON;
-
-                    BossEnemy boss = new BossEnemy(bx, by, EnemyType.TANK, this, bossType);
-                    int bossCount = (int)(elapsedTime / bossSpawnInterval);
-                    boss.maxHp *= 1f + 0.2f * bossCount;
-                    boss.hp = boss.maxHp;
-
-                    enemies.add(boss);
-                    System.out.println("Boss spawned! Total bosses so far: " + (bossCount + 1));
-
-                    // 🧹 Minden kis ellenség eltűnik, csak a boss marad
-                    enemies.removeIf(e -> !(e instanceof BossEnemy));
-                }
-            }
-
-            return; // ⛔ Kilépünk, nem spawnolunk normál enemy-t
-        }
-
-        // --- NORMÁL ENEMY SPAWN (ha nincs boss) ---
-        int minutesElapsed = (int) (elapsedTime / 60.0);
-        int difficultyStages = minutesElapsed / 3;
-        float spawnMultiplier = Math.max(0.25f, 1.0f - 0.15f * minutesElapsed);
-        enemySpawnInterval = baseEnemySpawnInterval * spawnMultiplier;
-        enemySpawnTimer += deltaTime;
-        float difficultyMultiplier = 1.0f + 0.15f * difficultyStages;
-        float spawnRadius = 800 * 0.8f + 200.0f;
-
-        if (enemySpawnTimer > enemySpawnInterval) {
-            enemySpawnTimer = 0.0;
-            double angle = Math.random() * Math.PI * 2.0;
-            float ex = (float) (player.x + Math.cos(angle) * spawnRadius);
-            float ey = (float) (player.y + Math.sin(angle) * spawnRadius);
-            ex = Math.max(20, Math.min(worldWidth - 20, ex));
-            ey = Math.max(20, Math.min(worldHeight - 20, ey));
-
-            EnemyType type;
-            double r = Math.random();
-            if (r < 0.6) type = EnemyType.BASIC;
-            else if (r < 0.85) type = EnemyType.FAST;
-            else type = EnemyType.TANK;
-
-            Enemy spawned = new Enemy(ex, ey, 0, 0, type);
-            spawned.maxHp = Math.max(1, Math.round(spawned.maxHp * difficultyMultiplier));
-            spawned.hp = spawned.maxHp;
-            enemies.add(spawned);
-        }
-
-        // --- BOSS TIMER FRISSÍTÉS ---
-        bossSpawnTimer += deltaTime;
-        if (bossSpawnTimer >= bossSpawnInterval) {
-            bossSpawnTimer = 0.0;
-            long activeBosses = enemies.stream().filter(e -> e instanceof BossEnemy).count();
-
-            if (activeBosses < 3) {
-                double angle = Math.random() * Math.PI * 2.0;
-                float bossSpawnRadius = 400f + (float)(Math.random() * 400f);
-                float bx = (float)(player.x + Math.cos(angle) * bossSpawnRadius);
-                float by = (float)(player.y + Math.sin(angle) * bossSpawnRadius);
-                bx = Math.max(50, Math.min(worldWidth - 50, bx));
-                by = Math.max(50, Math.min(worldHeight - 50, by));
-
-                double roll = Math.random();
-                BossEnemy.BossType bossType;
-                if (roll < 0.33) bossType = BossEnemy.BossType.GHOST;
-                else if (roll < 0.66) bossType = BossEnemy.BossType.DEMON;
-                else bossType = BossEnemy.BossType.DRAGON;
-
-                BossEnemy boss = new BossEnemy(bx, by, EnemyType.TANK, this, bossType);
-                int bossCount = (int)(elapsedTime / bossSpawnInterval);
-                boss.maxHp *= 1f + 0.2f * bossCount;
-                boss.hp = boss.maxHp;
-
-                enemies.add(boss);
-                System.out.println("Boss spawned! Total bosses so far: " + (bossCount + 1));
-
-                // 🧹 Minden kis ellenség eltűnik, csak a boss marad
-                enemies.removeIf(e -> !(e instanceof BossEnemy));
-            }
-        }
-    }
-
-    
-    
+    /**
+     * Ellenségek frissítése (csak a saját 'update' logikájuk, pl. mozgás).
+     * Az ütközésvizsgálat átkerült a CollisionSystem-be.
+     */
     private void updateEnemies(float deltaTime) {
         Iterator<Enemy> enemyIterator = enemies.iterator();
         while (enemyIterator.hasNext()) {
             Enemy enemy = enemyIterator.next();
             enemy.update(deltaTime, player);
-
-            // Enemy-Bullet collision
-            Iterator<Bullet> bulletIter = bullets.iterator();
-            while (bulletIter.hasNext()) {
-                Bullet b = bulletIter.next();
-                if (b.owner == Bullet.Owner.PLAYER && checkCollision(enemy, b)) {
-                    enemy.takeDamage(player.damage);
-                    SoundManager.playOverlap("damage");
-                    bulletIter.remove();
-
-                    if (enemy.isDead()) {
-                        handleEnemyDeath(enemy);
-                        enemyIterator.remove();
-                        break;
-                    }
-                }
-            }
-
-            if (enemy.isDead()) continue;
-
-            // Enemy-Player collision
-            if (checkCollision(enemy, player)) {
-                if (enemy instanceof BossEnemy) {
-                    player.takeDamage(5);
-                    System.out.println("Player was slain by the Boss!");
-                    SoundManager.playOverlap("damage");
-                    gameOver = true;
-                } else {
-                    player.takeDamage(1);
-                    handleEnemyDeath(enemy);
-                    enemyIterator.remove();
-                }
-
-                if (player.isDead()) {
-                    System.out.println("Game Over!");
-                    gameOver = true;
-                }
-            }
-        }
-
-        // --- Enemy bullets hitting player ---
-        Iterator<Bullet> enemyBullets = bullets.iterator();
-        while (enemyBullets.hasNext()) {
-            Bullet b = enemyBullets.next();
-            if (b.owner == Bullet.Owner.ENEMY && checkCollision(player, b)) {
-                player.takeDamage(1);
-                SoundManager.playOverlap("damage");
-                enemyBullets.remove();
-
-                if (player.isDead()) {
-                    System.out.println("Game Over!");
-                    gameOver = true;
-                    break;
-                }
-            }
         }
     }
 
-    
-    private void handleEnemyDeath(Enemy enemy) {
-        xpOrbs.add(new XPOrb(enemy.x, enemy.y, enemy.getXp()));
-        score += enemy.type == EnemyType.TANK ? 30 : 10;
-        
-        int lsLevel = getGadgetLevel("Life Steal");
-        if (lsLevel > 0) {
-            float chance = lsLevel * 0.03f;
-            if (Math.random() < chance) {
-                player.heal(1);
-                floatingTexts.add(new FloatingText(player.x, player.y - 40, "+HP", 1.0f, -40f, 0.3f, 1f, 0.3f));
-            }
-        }
-    }
-    
+    /**
+     * A GadgetSystem (pl. Orbit Blade) hívja, ha megöl egy ellenséget.
+     * Továbbítjuk a LevelingSystem-nek.
+     */
     public void killEnemy(Enemy enemy) {
-        handleEnemyDeath(enemy);
+        levelingSystem.onEnemyKilled(enemy);
         enemies.remove(enemy);
     }
 
-
+    /**
+     * XP Orbok frissítése (csak mozgás, vonzódás és pályaelhagyás).
+     * Az ütközésvizsgálat átkerült a CollisionSystem-be.
+     */
     private void updateXPOrbs(float deltaTime) {
         Iterator<XPOrb> xpIter = xpOrbs.iterator();
         while (xpIter.hasNext()) {
@@ -282,30 +156,8 @@ public class GameWorld {
 
             if (orb.x < -100 || orb.x > worldWidth + 100 || orb.y < -100 || orb.y > worldHeight + 100) {
                 xpIter.remove();
-                continue;
-            }
-
-            if (checkCollision(orb, player)) {
-                xp += orb.value;
-                floatingTexts.add(new FloatingText(player.x, player.y - player.size, "+" + orb.value, 1.2f, -40.0f, 1.0f, 1.0f, 0.2f));
-                SoundManager.playOverlap("xp");
-
-                if (xp >= xpToNext) {
-                    levelUp();
-                }
-                xpIter.remove();
             }
         }
-    }
-    
-    private void levelUp() {
-        xp -= xpToNext;
-        level++;
-        xpToNext = calcXpForLevel(level);
-        floatingTexts.add(new FloatingText(player.x, player.y - player.size - 20, "Level Up!", 1.6f, -70.0f, 1.0f, 0.8f, 0.0f));
-        levelUpMenuActive = true;
-        SoundManager.play("levelup");
-        generateLevelUpOptions();
     }
     
     private void updateFloatingTexts(float deltaTime) {
@@ -314,16 +166,17 @@ public class GameWorld {
             return ft.life <= 0f;
         });
     }
-    
-    // ... (rest of the logic methods: initGadgets, recomputePlayerStats, etc.)
-    // ... (This includes calcXpForLevel, getGadgetLevel, spawnPlayerBullets, checkCollision)
 
+    /**
+     * Az InputHandler hívja. Továbbítjuk a kérést a LevelingSystem-nek.
+     */
     public void selectGadget(Gadget gadget) {
-        gadget.levelUp();
-        recomputePlayerStats();
-        levelUpMenuActive = false;
-        floatingTexts.add(new FloatingText(player.x, player.y, gadget.name + " +1", 1.5f, -50f, 0f, 1f, 0f));
+        levelingSystem.selectGadget(gadget);
     }
+    
+    // ... (A következő metódusok VÁLTOZATLANOK maradnak a GameWorld-ben) ...
+    // spawnPlayerBullets, recomputePlayerStats, getGadgetLevel, 
+    // getAttackSpeedMultiplier, initGadgets, loadSounds
 
     private void spawnPlayerBullets() {
         Enemy nearest = player.findNearestEnemy(enemies);
@@ -347,42 +200,15 @@ public class GameWorld {
         player.shootCooldown = 0.75f * getAttackSpeedMultiplier();
     }
     
-    private boolean checkCollision(GameObject a, GameObject b) {
-        float dx = a.x - b.x;
-        float dy = a.y - b.y;
-        float dist = (float) Math.sqrt(dx * dx + dy * dy);
-        return dist < (a.size / 2 + b.size / 2);
-    }
-    
-    private int calcXpForLevel(int lvl) {
-        double val = 100.0 * Math.pow(1.45, Math.max(0, lvl - 1));
-        return Math.max(20, (int) Math.round(val));
-    }
-    
-    private void generateLevelUpOptions() {
-        availableGadgets.clear();
-        List<Gadget> nonMaxGadgets = new ArrayList<>();
-        for (Gadget gadget : gadgets) {
-            if (gadget.level < gadget.maxLevel) {
-                nonMaxGadgets.add(gadget);
-            }
-        }
-        Collections.shuffle(nonMaxGadgets);
-        int count = Math.min(3, nonMaxGadgets.size());
-        for (int i = 0; i < count; i++) {
-            availableGadgets.add(nonMaxGadgets.get(i));
-        }
-    }
-    
-    private void recomputePlayerStats() {
-        player.damage = player.baseDamage + getGadgetLevel("Attack Damage");
-        int newMaxHp = player.baseMaxHp + getGadgetLevel("Max HP");
+    public void recomputePlayerStats() {
+        player.damage = player.baseDamage + 2 * getGadgetLevel("Attack Damage");
+        int newMaxHp = player.baseMaxHp + 2 * getGadgetLevel("Max HP");
         if (newMaxHp != player.maxHp) {
             float percent = (float)player.hp / (float)player.maxHp;
             player.maxHp = newMaxHp;
             player.hp = Math.min(player.maxHp, Math.max(1, Math.round(player.maxHp * percent)));
         }
-        player.moveSpeed = player.baseMoveSpeed * (1.0f + 0.1f * getGadgetLevel("Movement Speed"));
+        player.moveSpeed = player.baseMoveSpeed * (1.0f + 0.2f * getGadgetLevel("Movement Speed"));
     }
 
     public int getGadgetLevel(String name) {
@@ -396,10 +222,10 @@ public class GameWorld {
     }
     
     private void initGadgets() {
-        gadgets.add(new Gadget("Attack Damage", "Increases bullet damage by 1.", 5));
+        gadgets.add(new Gadget("Attack Damage", "Increases bullet damage by 2.", 5));
         gadgets.add(new Gadget("Attack Speed", "Increases attack speed by 20%.", 5));
-        gadgets.add(new Gadget("Max HP", "Increases max health by 1.", 5));
-        gadgets.add(new Gadget("Movement Speed", "Increases movement speed by 10%.", 5));
+        gadgets.add(new Gadget("Max HP", "Increases max health by 2.", 5));
+        gadgets.add(new Gadget("Movement Speed", "Increases movement speed by 20%.", 5));
         gadgets.add(new Gadget("Multi Attack", "Shoots an additional projectile.", 3));
         gadgets.add(new Gadget("Life Steal", "3% chance on kill to restore 1 HP.", 3));
         gadgets.add(new Gadget("Orbit Blade", "A blade circles you, damaging enemies.", 5));

@@ -8,7 +8,7 @@ public class BossEnemy extends Enemy {
 
     public enum BossType { GHOST, DEMON, DRAGON }
 
-    private final GameWorld world;
+    // private final GameWorld world; // <-- TÖRÖLVE (már az ősosztályban van)
     private final BossType bossType;
     private final TextureLoader.TextureInfo textureInfo;
 
@@ -28,8 +28,8 @@ public class BossEnemy extends Enemy {
 
 
     public BossEnemy(float x, float y, EnemyType type, GameWorld world, BossType bossType) {
-        super(x, y, 0, 0, type);
-        this.world = world;
+        super(x, y, 0, 0, type, world); // <-- MÓDOSÍTVA: 'world' átadva az ősnek
+        // this.world = world; // <-- TÖRÖLVE
         this.bossType = bossType;
 
         this.size = 200f;
@@ -99,6 +99,11 @@ public class BossEnemy extends Enemy {
             world.getBullets().add(new Bullet(x, y, vx, vy, Bullet.Owner.ENEMY));
         }
         SoundManager.playOverlap("laser");
+    }
+    
+    @Override
+    public int getXp() {
+        return 400; 
     }
 
     // 👻 GHOST — gyors, teleportál, kiszámíthatatlan

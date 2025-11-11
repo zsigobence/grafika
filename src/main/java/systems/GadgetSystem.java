@@ -17,6 +17,8 @@ public class GadgetSystem {
     private final Player player;
     private final Map<Enemy, Float> orbitHitTimers = new HashMap<>();
     private float laserTimer = 0f;
+    private static float magnetCooldown = 0.0f;
+    private static final float MAGNET_COOLDOWN_TIME = 30.0f;
 
     public GadgetSystem(GameWorld world, Player player) {
         this.world = world;
@@ -26,9 +28,27 @@ public class GadgetSystem {
     public void update(float dt) {
         updateOrbitBlades(dt);
         updateLaser(dt);
+        updateMagnet(dt);
+    }
+    
+    public static float getMagnetCooldown() {
+    	return magnetCooldown;
     }
 
-
+    private void updateMagnet(float dt) {
+    	if (magnetCooldown > 0) {
+            magnetCooldown -= dt;
+        }
+    }
+    
+    public static void activateMagnet(GameWorld world) {
+    	if(magnetCooldown > 0) return;
+        List<XPOrb> orbs = world.getXPOrbs(); 
+        for (XPOrb orb : orbs) {
+            orb.setMagnetized(true);
+        }
+        magnetCooldown = MAGNET_COOLDOWN_TIME;
+    }
 
     private void updateOrbitBlades(float dt) {
         int level = world.getGadgetLevel("Orbit Blade");
@@ -64,7 +84,7 @@ public class GadgetSystem {
                         SoundManager.playOverlap("flying-blade");
 
                         if (enemy.isDead()) {
-                            deadEnemies.add(enemy); // később töröljük
+                            deadEnemies.add(enemy); 
                             orbitHitTimers.remove(enemy);
                         }
                     }
@@ -126,7 +146,7 @@ public class GadgetSystem {
     public void renderLaserBullets(Renderer renderer) {
         for (Bullet b : world.getBullets()) {
             if (b instanceof LaserBullet) {
-                renderer.drawQuad(b.x, b.y, b.size * 2.4f, b.size * 2.4f, 1.0f, 0.2f, 0.2f, 0.22f); // Glow
+                renderer.drawQuad(b.x, b.y, b.size * 2.1f, b.size * 2.4f, 1.0f, 0.2f, 0.2f, 0.22f); // Glow
                 renderer.drawQuad(b.x, b.y, b.size, b.size, 1.0f, 0.08f, 0.08f, 1.0f); // Core
             }
         }

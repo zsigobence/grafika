@@ -20,29 +20,36 @@ public class Renderer {
     private UIRenderer uiRenderer;
     private TextureLoader textureLoader;
 
-    private int program, textProgram, textureProgram;
+    // --- A dedikált textúra kötegelő ---
+    private TextureRenderer textureRenderer;
+
+    // --- Színes (Color Batch) shaderek és VAO ---
+    private int program, textProgram;
     private int uniProjection;
-    private int texUniProjection, texUniModel, texUniTexture;
-    private int textureVAO, textureVBO, textureEBO;
     private static final int MAX_QUADS = 10000;
     private static final int MAX_VERTICES = MAX_QUADS * 4;
     private static final int MAX_INDICES = MAX_QUADS * 6;
     private static final int VERTEX_SIZE_FLOATS = 6;
     private static final int VERTEX_SIZE_BYTES = VERTEX_SIZE_FLOATS * Float.BYTES;
 
-    // A VAO, VBO, EBO a színes kötegelőhöz
     private int colorBatchVAO, colorBatchVBO, colorBatchEBO;
-    // A CPU-oldali buffer, amibe a vertex adatokat gyűjtjük
     private FloatBuffer colorBatchBuffer;
-    // Hány négyzet van éppen a kötegben
     private int colorBatchQuadCount = 0;
 
+    // --- Betűtípus (Text) shaderek és VAO ---
     private int fontTexture, textVAO, textVBO;
     private STBTTBakedChar.Buffer cdata;
 
     private float camLeft = 0, camTop = 0;
 
-    // Shader Source
+    // --- Mátrixok és kötegelés állapot ---
+    private float[] worldProjection;
+    private float[] uiProjection;
+    private int currentTextureId = -1;
+    private float[] currentProjectionMatrix = null;
+
+
+    // --- Shader források (CSAK a szín és a szöveg maradt) ---
     private static final String vertexShaderSource =
     	    "#version 330 core\n" +
     	    "layout (location = 0) in vec2 aPos;\n" +
@@ -77,37 +84,12 @@ public class Renderer {
         "uniform vec4 uTextColor;\n" +
         "void main() { float alpha = texture(uTexture, TexCoord).r; FragColor = vec4(uTextColor.rgb, alpha * uTextColor.a); }";
 
-    // Új: Textúra shader
-    private static final String textureVertexShaderSource =
-        "#version 330 core\n" +
-        "layout (location = 0) in vec2 aPos;\n" +
-        "uniform mat4 uModel;\n" +
-        "uniform mat4 uProjection;\n" +
-        "out vec2 TexCoord;\n" +
-        "void main() {\n" +
-        "   gl_Position = uProjection * uModel * vec4(aPos, 0.0, 1.0);\n" +
-        "   TexCoord = aPos + vec2(0.5); // Convert from [-0.5,0.5] to [0,1]\n" +
-        "}";
-
-    private static final String textureFragmentShaderSource =
-    	    "#version 330 core\n" +
-    	    "in vec2 TexCoord;\n" +
-    	    "out vec4 FragColor;\n" +
-    	    "uniform sampler2D uTexture;\n" +
-    	    "uniform vec4 uTint;\n" +
-    	    "void main() {\n" +
-    	    "    vec4 texColor = texture(uTexture, TexCoord);\n" +
-    	    "    // Ha nincs uTint beállítva, legyen automatikusan fehér (1.0)\n" +
-    	    "    vec4 tint = (uTint.a == 0.0 && uTint.rgb == vec3(0.0)) ? vec4(1.0) : uTint;\n" +
-    	    "    FragColor = vec4(texColor.rgb * tint.rgb, texColor.a * tint.a);\n" +
-    	    "}";
-
-
 
     public Renderer(int width, int height) {
         this.width = width;
         this.height = height;
         textureLoader = TextureLoader.getInstance();
+        textureRenderer = new TextureRenderer();
     }
     
 
@@ -117,14 +99,12 @@ public class Renderer {
 
         textProgram = createShader(textVertexShaderSource, textFragmentShaderSource);
         
-        // Új: Textúra shader program
-        textureProgram = createShader(textureVertexShaderSource, textureFragmentShaderSource);
-        texUniProjection = glGetUniformLocation(textureProgram, "uProjection");
-        texUniModel = glGetUniformLocation(textureProgram, "uModel");
-        texUniTexture = glGetUniformLocation(textureProgram, "uTexture");
+        // Textúra kötegelő inicializálása
+        textureRenderer.init();
 
         initFont();
         
+        // Color Batch VAO inicializálása
         colorBatchVAO = glGenVertexArrays();
         glBindVertexArray(colorBatchVAO);
 
@@ -132,10 +112,9 @@ public class Renderer {
         glBindBuffer(GL_ARRAY_BUFFER, colorBatchVBO);
         glBufferData(GL_ARRAY_BUFFER, (long)MAX_VERTICES * VERTEX_SIZE_BYTES, GL_DYNAMIC_DRAW);
 
-
         glVertexAttribPointer(0, 2, GL_FLOAT, false, VERTEX_SIZE_BYTES, 0);
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(1, 4, GL_FLOAT, false, VERTEX_SIZE_BYTES, 2 * Float.BYTES); // 2 float eltolás
+        glVertexAttribPointer(1, 4, GL_FLOAT, false, VERTEX_SIZE_BYTES, 2 * Float.BYTES);
         glEnableVertexAttribArray(1);
 
         int[] indices = new int[MAX_INDICES];
@@ -155,31 +134,7 @@ public class Renderer {
 
         colorBatchBuffer = MemoryUtil.memAllocFloat(MAX_VERTICES * VERTEX_SIZE_FLOATS);
         
-        float[] texVertices = {
-        	    // Pos         
-        	    -0.5f, -0.5f, 
-        	     0.5f, -0.5f, 
-        	     0.5f,  0.5f, 
-        	    -0.5f,  0.5f  
-        	};
-        	int[] texIndices = { 0, 1, 2, 2, 3, 0 };
-
-        	textureVAO = glGenVertexArrays();
-        	textureVBO = glGenBuffers();
-        	textureEBO = glGenBuffers();
-
-        	glBindVertexArray(textureVAO);
-
-        	glBindBuffer(GL_ARRAY_BUFFER, textureVBO);
-        	glBufferData(GL_ARRAY_BUFFER, texVertices, GL_STATIC_DRAW);
-
-        	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, textureEBO);
-        	glBufferData(GL_ELEMENT_ARRAY_BUFFER, texIndices, GL_STATIC_DRAW);
-
-        	glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * Float.BYTES, 0);
-        	glEnableVertexAttribArray(0);
-
-        // Text VAO/VBO
+        // Text VAO/VBO inicializálása
         textVAO = glGenVertexArrays();
         textVBO = glGenBuffers();
         glBindVertexArray(textVAO);
@@ -187,7 +142,6 @@ public class Renderer {
         int vertexSizeBytes = 4 * Float.BYTES; 
 	    int maxVertices = 2048 * 6; 
 	
-
 	    glBufferData(GL_ARRAY_BUFFER, (long)maxVertices * vertexSizeBytes, GL_DYNAMIC_DRAW);
 	
 	    glVertexAttribPointer(0, 2, GL_FLOAT, false, vertexSizeBytes, 0);
@@ -204,15 +158,19 @@ public class Renderer {
         loadTextures();
     }
 
+    /**
+     * MÓDOSÍTOTT render ciklus, amely kezeli a szín- és textúra-kötegeket.
+     */
     public void render(GameWorld world) {
         glClearColor(0.08f, 0.08f, 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // --- WORLD RENDERING ---
+        // --- 1. KAMERA ÉS MÁTRIXOK BEÁLLÍTÁSA ---
         setupCamera(world);
+        this.worldProjection = ortho(camLeft, camLeft + width, camTop + height, camTop, -1.0f, 1.0f);
+        this.uiProjection = ortho(0, width, height, 0, -1.0f, 1.0f);
         
-        float[] worldProjection = ortho(camLeft, camLeft + width, camTop + height, camTop, -1.0f, 1.0f);
-        
+        // --- 2. VILÁG SZÍNES OBJEKTUMOK (Color Batch) ---
         startColorBatch(worldProjection);
 
         drawGrid(world);
@@ -222,41 +180,52 @@ public class Renderer {
         world.getGadgetSystem().renderLaserBullets(this);
 
         flushColorBatch();
+        
+        // --- 3. VILÁG TEXTÚRÁZOTT OBJEKTUMOK (Texture Batch) ---
+        startTextureBatch(worldProjection);
+        
         drawPlayer(world.getPlayer());
         drawEnemies(world);
         world.getGadgetSystem().renderOrbitBlades(this);
         
-        glBindVertexArray(0);
+        flushTextureBatch();
         
-        // --- UI RENDERING ---
-        float[] uiProjection = ortho(0, width, height, 0, -1.0f, 1.0f);
+        glBindVertexArray(0); // Kötegek után VAO leválasztása
+        
+        // --- 4. UI SZÍNES OBJEKTUMOK (Color Batch) ---
         startColorBatch(uiProjection);
 
         uiRenderer.renderQuads(world); 
+        
         flushColorBatch();
         
-        uiRenderer.renderImmediate(world, camLeft, camTop);
+        // --- 5. UI TEXTÚRÁZOTT OBJEKTUMOK (Texture Batch) ---
+        // Az UIRenderer refaktorálva lett (renderTextures / renderText)
+        startTextureBatch(uiProjection);
+        
+        uiRenderer.renderTextures(world);
+        
+        flushTextureBatch();
+
+        // --- 6. UI SZÖVEG (Immediate Mode) ---
+        // A szöveg a saját shaderét használja, ezért marad utoljára.
+        uiRenderer.renderText(world, camLeft, camTop);
     }
     
     public float getTextWidth(String text, float scale) {
         if (cdata == null) {
             return text.length() * 10f * scale; 
         }
-
         try (MemoryStack stack = MemoryStack.stackPush()) {
             FloatBuffer xBuf = stack.floats(0.0f);
             FloatBuffer yBuf = stack.floats(0.0f);
-            
             STBTTAlignedQuad q = STBTTAlignedQuad.malloc(stack);
-
             for (int i = 0; i < text.length(); i++) {
                 char c = text.charAt(i);
                 if (c < 32 || c >= 128) continue;
                 stbtt_GetBakedQuad(cdata, 512, 512, c - 32, xBuf, yBuf, q, true);
             }
-
             return xBuf.get(0) * scale;
-            
         } catch (Exception e) {
             System.err.println("Hiba a szöveg szélességének számítása közben: " + e.getMessage());
             return text.length() * 10f * scale;
@@ -264,7 +233,9 @@ public class Renderer {
     }
     
     private void loadTextures() {
+        // ... (Ez a metódus változatlan) ...
         try {
+            // Gadget textúrák
             textureLoader.loadTexture("src/main/assets/blade.png");
             textureLoader.loadTexture("src/main/assets/damage.png");
             textureLoader.loadTexture("src/main/assets/attack_speed.png");
@@ -273,10 +244,16 @@ public class Renderer {
             textureLoader.loadTexture("src/main/assets/multishot.png");
             textureLoader.loadTexture("src/main/assets/heart_half.png");
             textureLoader.loadTexture("src/main/assets/laser.png");
-            textureLoader.loadTexture("src/main/assets/tiny.png");
-            textureLoader.loadTexture("src/main/assets/tank.png");
-            textureLoader.loadTexture("src/main/assets/normal.png");
+            textureLoader.loadTexture("src/main/assets/magnet.png");
+            
+            // Entitás textúrák
             textureLoader.loadTexture("src/main/assets/player.png");
+            textureLoader.loadTexture("src/main/assets/tiny.png"); // Fast
+            textureLoader.loadTexture("src/main/assets/tank.png");
+            textureLoader.loadTexture("src/main/assets/normal.png"); // Basic
+            textureLoader.loadTexture("src/main/assets/ranged.png"); // <-- ÚJ TEXTÚRA
+            
+            // Boss textúrák
             textureLoader.loadTexture("src/main/assets/ghost.png");
             textureLoader.loadTexture("src/main/assets/demon.png");
             textureLoader.loadTexture("src/main/assets/dragon.png");
@@ -287,36 +264,70 @@ public class Renderer {
         }
     }
     
-    // ÚJ: Textúra renderelés metódusok - ezeket használja a UIRenderer
-    public void renderTexture(String texturePath, float centerX, float centerY, float width, float height) {
+    // --- ÚJ KÖTEG-KEZELŐ METÓDUSOK ---
+
+    private void startTextureBatch(float[] projectionMatrix) {
+        textureRenderer.startBatch(projectionMatrix);
+        this.currentProjectionMatrix = projectionMatrix;
+        this.currentTextureId = -1; // Kényszerítjük a textúra beállítását az első hívásnál
+    }
+
+    private void flushTextureBatch() {
+        textureRenderer.flushBatch();
+        this.currentTextureId = -1;
+        this.currentProjectionMatrix = null;
+    }
+
+    /**
+     * Központi textúra-rajzoló metódus, amely kezeli a köteget.
+     * @param isWorld Meghatározza, hogy a világ vagy a UI mátrixot használja-e.
+     */
+    private void drawTexture(String texturePath, float centerX, float centerY, float w, float h, 
+                             float r, float g, float b, float a, boolean isWorld) {
+        
         TextureLoader.TextureInfo textureInfo = textureLoader.getTextureInfo(texturePath);
         if (textureInfo == null) {
-            System.err.println("Texture not found: " + texturePath);
+            System.err.println("Texture not found for batching: " + texturePath);
+            // Fallback: rajzoljunk egy színes quadot a másik kötegbe
+            // (Figyelem: ez feltételezi, hogy a color batch aktív, ami nem biztos)
+            // Biztonságosabb, ha kihagyjuk, vagy a color batch-be rajzoljuk:
+            // if (isWorld) drawQuad(centerX, centerY, w, h, 1f, 0f, 1f, 0.5f);
             return;
         }
+        
+        float[] projection = isWorld ? this.worldProjection : this.uiProjection;
 
-        // Textúra shader használata
-        glUseProgram(textureProgram);
-        glBindVertexArray(textureVAO);
+        // Ellenőrzés, hogy a megfelelő köteg aktív-e
+        if (projection != this.currentProjectionMatrix) {
+            flushTextureBatch();
+            startTextureBatch(projection);
+        }
         
-        glUniform4f(glGetUniformLocation(textureProgram, "uTint"), 1f, 1f, 1f, 1f);
+        // Ellenőrzés, hogy textúrát kell-e váltani
+        if (textureInfo.textureId != this.currentTextureId) {
+            textureRenderer.flushBatch(); // Előző textúra kötegének kiürítése
+            textureRenderer.bindTexture(textureInfo.textureId);
+            this.currentTextureId = textureInfo.textureId;
+        }
+
+        // Quad koordináták
+        float x0 = centerX - w / 2f;
+        float y0 = centerY - h / 2f;
+        float x1 = centerX + w / 2f;
+        float y1 = centerY + h / 2f;
         
-        // Projection beállítása (UI mód)
-        glUniformMatrix4fv(texUniProjection, false, ortho(0, this.width, this.height, 0, -1.0f, 1.0f));
-        
-        // Model mátrix beállítása
-        glUniformMatrix4fv(texUniModel, false, createModelMatrix(centerX, centerY, width, height));
-        
-        // Textúra kötése
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, textureInfo.textureId);
-        glUniform1i(texUniTexture, 0);
-        
-        // Rajzolás
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        
-        // Textúra leválasztása
-        glBindTexture(GL_TEXTURE_2D, 0);
+        // Hozzáadás a köteghez (UV: 0,0-tól 1,1-ig)
+        textureRenderer.addQuadToBatch(x0, y0, x1, y1, 0f, 0f, 1f, 1f, r, g, b, a);
+    }
+    
+    // --- MÓDOSÍTOTT Textúra renderelés metódusok (mostantól a köteget hívják) ---
+
+    public void renderTexture(String texturePath, float centerX, float centerY, float width, float height, float alpha) {
+        drawTexture(texturePath, centerX, centerY, width, height, 1f, 1f, 1f, alpha, false); // isWorld = false
+    }
+    
+    public void renderTexture(String texturePath, float centerX, float centerY, float width, float height) {
+    	drawTexture(texturePath, centerX, centerY, width, height, 1f, 1f, 1f, 1f, false); // isWorld = false
     }
     
     public void renderTextureAspectRatio(String texturePath, float centerX, float centerY, float maxSize) {
@@ -338,42 +349,20 @@ public class Renderer {
     }
     
     public void renderTextureRotated(String texturePath, float centerX, float centerY, float width, float height, float angle) {
-        // Egyszerűsített változat - kihagyjuk a forgatást most
+        // A kötegelés miatt a forgatást vertex szinten kellene megoldani,
+        // ami bonyolultabb. Egyelőre forgatás nélkül adjuk a köteghez.
         renderTexture(texturePath, centerX, centerY, width, height);
     }
 
     public void renderTextureInWorld(String texturePath, float centerX, float centerY, float width, float height) {
-        TextureLoader.TextureInfo textureInfo = textureLoader.getTextureInfo(texturePath);
-        if (textureInfo == null) {
-        	System.err.println("Missing texture in renderTextureInWorld: " + texturePath);
-        	drawQuad(centerX, centerY, width, height, 0.8f, 0.2f, 0.2f, 0.5f);
-        	return;
-            
-        }
-
-        // Textúra shader használata
-        glUseProgram(textureProgram);
-        glBindVertexArray(textureVAO);
-        
-        glUniform4f(glGetUniformLocation(textureProgram, "uTint"), 1f, 1f, 1f, 1f);
-        
-        // FONTOS: Világ projekció használata (nem UI projekció)
-        glUniformMatrix4fv(texUniProjection, false, ortho(camLeft, camLeft + this.width, camTop + this.height, camTop, -1.0f, 1.0f));
-        
-        // Model mátrix beállítása
-        glUniformMatrix4fv(texUniModel, false, createModelMatrix(centerX, centerY, width, height));
-        
-        // Textúra kötése
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, textureInfo.textureId);
-        glUniform1i(texUniTexture, 0);
-        
-        // Rajzolás
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        
-        // Textúra leválasztása
-        glBindTexture(GL_TEXTURE_2D, 0);
+        drawTexture(texturePath, centerX, centerY, width, height, 1f, 1f, 1f, 1f, true); // isWorld = true
     }
+    
+    public void renderTextureTinted(String texturePath, float centerX, float centerY, float width, float height,
+			float r, float g, float b, float a) {
+		drawTexture(texturePath, centerX, centerY, width, height, r, g, b, a, true); // isWorld = true
+	}	
+    
     public TextureLoader getTextureLoader() {
         return textureLoader;
     }
@@ -388,7 +377,10 @@ public class Renderer {
         if (camTop > world.worldHeight - this.height) camTop = world.worldHeight - this.height;
     }
 
-    // Drawing methods
+    // --- A rajzoló metódusok (drawGrid, drawPlayer, stb.) VÁLTOZATLANOK MARADNAK ---
+    // Mivel a renderTexture... metódusokat hívják, amiknek a szignatúrája nem változott,
+    // így ezek a metódusok is helyesen fognak működni.
+
     private void drawGrid(GameWorld world) {
         int cell = 64;
         for (int gx = 0; gx < world.worldWidth; gx += cell) {
@@ -412,76 +404,39 @@ public class Renderer {
         	    };
 
         	    float tintR = 1f, tintG = 1f, tintB = 1f, tintA = 1f;
-
-        	    // Fázis alap szín
         	    switch (boss.getPhase()) {
         	        case 1 -> { tintR = 1f; tintG = 1f; tintB = 1f; }
         	        case 2 -> { tintR = 1f; tintG = 0.7f; tintB = 0.7f; }
         	        case 3 -> { tintR = 1f; tintG = 0.3f; tintB = 0.3f; }
         	    }
-
-        	    // Villanás (általános)
         	    if (boss.getFlashTimer() > 0) {
         	        float pulse = (float) Math.sin(boss.getFlashTimer() * 25f);
         	        float intensity = 0.8f + 0.2f * Math.abs(pulse);
-        	        tintR *= intensity;
-        	        tintG *= intensity;
-        	        tintB *= intensity;
+        	        tintR *= intensity; tintG *= intensity; tintB *= intensity;
         	    }
-
-        	    // 👻 GHOST speciális fade effekt
         	    if (boss.getBossType() == BossEnemy.BossType.GHOST) {
         	        float fadeCycle = (float) Math.sin(System.currentTimeMillis() * 0.003);
-        	        tintA = 0.7f + 0.3f * fadeCycle; // lebegés
-
-        	        // 👻 Teleport alatt tűnjön el
+        	        tintA = 0.7f + 0.3f * fadeCycle; 
         	        if (boss.isTeleporting()) {
-        	        	float progress = boss.getFlashTimer() / 0.6f; // 0–1 között
-        	            tintA = Math.max(0.1f, progress); // fokozatos eltűnés
+        	        	float progress = boss.getFlashTimer() / 0.6f; 
+        	            tintA = Math.max(0.1f, progress); 
         	        }
-
-        	        // 👻 Flash alatt villogjon (eltűnés/megérkezéskor)
         	        if (boss.getFlashTimer() > 0) {
         	            tintA = Math.abs((float) Math.sin(boss.getFlashTimer() * (float)Math.PI));
         	        }
         	    }
-
-
         	    renderTextureTinted(texturePath, boss.x, boss.y, boss.size, boss.size, tintR, tintG, tintB, tintA);
         	}
             else {
-                // Normál enemy
                 switch (enemy.type) {
                     case BASIC -> renderTextureInWorld("src/main/assets/normal.png", enemy.x, enemy.y, enemy.size, enemy.size);
                     case FAST  -> renderTextureInWorld("src/main/assets/tiny.png", enemy.x, enemy.y, enemy.size, enemy.size);
                     case TANK  -> renderTextureInWorld("src/main/assets/tank.png", enemy.x, enemy.y, enemy.size, enemy.size);
+                    case RANGED -> renderTextureInWorld("src/main/assets/ranged.png", enemy.x, enemy.y, enemy.size, enemy.size);
                 }
             }
         }
     }
-
-    public void renderTextureTinted(String texturePath, float centerX, float centerY, float width, float height,
-            						float r, float g, float b, float a) {
-		TextureLoader.TextureInfo textureInfo = textureLoader.getTextureInfo(texturePath);
-		if (textureInfo == null) return;
-		
-		glUseProgram(textureProgram);
-		glBindVertexArray(textureVAO);
-		
-		glUniformMatrix4fv(texUniProjection, false, ortho(camLeft, camLeft + this.width, camTop + this.height, camTop, -1.0f, 1.0f));
-		glUniformMatrix4fv(texUniModel, false, createModelMatrix(centerX, centerY, width, height));
-		
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, textureInfo.textureId);
-		glUniform1i(texUniTexture, 0);
-		
-		// Színtónus shader paraméterként (új változó, beállítható a shaderbe)
-		glUniform4f(glGetUniformLocation(textureProgram, "uTint"), r, g, b, a);
-		
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-		glBindTexture(GL_TEXTURE_2D, 0);
-    }	
-
     
     private void drawHealthBar(GameWorld world) {
         renderHealthBar(world.getPlayer());
@@ -492,32 +447,36 @@ public class Renderer {
     
     private void drawBullets(GameWorld world) {
         for (Bullet b : world.getBullets()) {
-             if (b instanceof LaserBullet) continue; // Rendered by GadgetSystem
-             drawQuad(b.x, b.y, b.size, b.size, 1.0f, 0.9f, 0.2f, 1.0f);
+             if (b instanceof LaserBullet) continue;
+             
+             if (b.owner == Bullet.Owner.ENEMY) {
+                drawQuad(b.x, b.y, b.size, b.size, 1.0f, 0.2f, 0.1f, 1.0f);
+             } else {
+                drawQuad(b.x, b.y, b.size, b.size, 1.0f, 0.9f, 0.2f, 1.0f);
+             }
         }
     }
     
     private void drawXPOrbs(GameWorld world) {
         for (XPOrb orb : world.getXPOrbs()) {
-            float size = 15f - (15f - orb.value / 2);
+            float size = Math.min(15f, 15f - (15f - orb.value / 2));
             float pulse = 1.0f + 0.08f * (float)Math.sin(System.currentTimeMillis() / 100.0 + orb.hashCode() % 10);
             drawQuad(orb.x, orb.y, size * pulse, size * pulse, 1.0f, 1.0f, 0.45f, 1.0f);
         }
     }
 
+    // --- Color Batch (Színes négyzetek) segédfüggvényei (VÁLTOZATLANOK) ---
+    
     public void drawQuad(float x, float y, float w, float h, float r, float g, float b, float a) {
         if (colorBatchQuadCount >= MAX_QUADS) {
             flushColorBatch();
-            colorBatchBuffer.clear();
-            colorBatchQuadCount = 0;
+            startColorBatch(this.currentProjectionMatrix); // Újraindítás
         }
-
 
         float x0 = x - w * 0.5f;
         float y0 = y - h * 0.5f;
         float x1 = x + w * 0.5f;
         float y1 = y + h * 0.5f;
-
 
         colorBatchBuffer.put(x0).put(y0).put(r).put(g).put(b).put(a);
         colorBatchBuffer.put(x1).put(y0).put(r).put(g).put(b).put(a);
@@ -526,8 +485,6 @@ public class Renderer {
 
         colorBatchQuadCount++;
     }
-    
-
     
     public void renderHealthBar(Character character) {
         float barWidth = character.size, barHeight = 5;
@@ -543,31 +500,33 @@ public class Renderer {
     private void startColorBatch(float[] projectionMatrix) {
         glUseProgram(program);
         glUniformMatrix4fv(uniProjection, false, projectionMatrix);
-        
         glBindVertexArray(colorBatchVAO);
-        
         colorBatchBuffer.clear();
         colorBatchQuadCount = 0;
+        this.currentProjectionMatrix = projectionMatrix; // Állapot mentése
     }
 
     private void flushColorBatch() {
-        if (colorBatchQuadCount == 0) {
-            return;
-        }
-        glUseProgram(program);
+        if (colorBatchQuadCount == 0) return;
+        glUseProgram(program); // Biztonság kedvéért
         colorBatchBuffer.flip();
-        
         glBindVertexArray(colorBatchVAO);
         glBindBuffer(GL_ARRAY_BUFFER, colorBatchVBO);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, colorBatchEBO);
         glBufferSubData(GL_ARRAY_BUFFER, 0, colorBatchBuffer);
-
         glDrawElements(GL_TRIANGLES, colorBatchQuadCount * 6, GL_UNSIGNED_INT, 0);
-
-        glBindVertexArray(0);
+        
+        colorBatchBuffer.clear();
+        colorBatchQuadCount = 0;
+        this.currentProjectionMatrix = null; // Állapot törlése
     }
     
+    // --- Szöveg (Text) kirajzolás (VÁLTOZATLAN) ---
+    
     public void renderText(String text, float x, float y, float scale, float r, float g, float b, float a) {
+        // Ez a metódus "immediate mode" jellegű, a saját shaderét és VAO-ját használja.
+        // Ezért kell a kötegeken kívül, külön futtatni.
+        
         glUseProgram(textProgram);
         glUniformMatrix4fv(glGetUniformLocation(textProgram, "uProjection"), false, ortho(0, width, height, 0, -1, 1));
         glUniform4f(glGetUniformLocation(textProgram, "uTextColor"), r, g, b, a);
@@ -579,32 +538,23 @@ public class Renderer {
         glBindBuffer(GL_ARRAY_BUFFER, textVBO);
         
         int charCount = 0;
-
         try (MemoryStack stack = MemoryStack.stackPush()) {
             FloatBuffer xBuf = stack.floats(x / scale);
             FloatBuffer yBuf = stack.floats(y / scale);
             STBTTAlignedQuad q = STBTTAlignedQuad.malloc(stack);
-            
             FloatBuffer vertices = stack.mallocFloat(text.length() * 6 * 4);
-
             for (int i = 0; i < text.length(); i++) {
                 char c = text.charAt(i);
                 if (c < 32 || c >= 128) continue;
                 stbtt_GetBakedQuad(cdata, 512, 512, c - 32, xBuf, yBuf, q, true);
-                float x0 = q.x0() * scale;
-                float y0 = q.y0() * scale;
-                float x1 = q.x1() * scale;
-                float y1 = q.y1() * scale;
-             
+                float x0 = q.x0() * scale; float y0 = q.y0() * scale;
+                float x1 = q.x1() * scale; float y1 = q.y1() * scale;
                 vertices.put(x0).put(y0).put(q.s0()).put(q.t0());
                 vertices.put(x0).put(y1).put(q.s0()).put(q.t1());
                 vertices.put(x1).put(y0).put(q.s1()).put(q.t0());
-                
-                
                 vertices.put(x1).put(y0).put(q.s1()).put(q.t0());
                 vertices.put(x0).put(y1).put(q.s0()).put(q.t1());
                 vertices.put(x1).put(y1).put(q.s1()).put(q.t1());
-                
                 charCount++;
             }
             vertices.flip();
@@ -614,48 +564,47 @@ public class Renderer {
             glDrawArrays(GL_TRIANGLES, 0, charCount * 6);
         }
         glBindVertexArray(0);
-        
     }
     
-    // Cleanup
+    // --- Cleanup (MÓDOSÍTVA) ---
     public void cleanup() {
         glDeleteProgram(program);
         glDeleteProgram(textProgram);
-        glDeleteProgram(textureProgram);
+        
+        textureRenderer.cleanup(); 
+        
+        // Color Batch cleanup
         glDeleteVertexArrays(colorBatchVAO);
         glDeleteBuffers(colorBatchVBO);
         glDeleteBuffers(colorBatchEBO);
         if (colorBatchBuffer != null) {
             MemoryUtil.memFree(colorBatchBuffer);
         }
+        
+        // Text cleanup
         glDeleteVertexArrays(textVAO);
         glDeleteBuffers(textVBO);
         glDeleteTextures(fontTexture);
-        glDeleteVertexArrays(textureVAO);
-        glDeleteBuffers(textureVBO);
-        glDeleteBuffers(textureEBO);
+        
         if (cdata != null) cdata.free();
         textureLoader.cleanup();
     }
     
-    // --- PRIVATE HELPERS ---
+    // --- PRIVATE HELPERS (VÁLTOZATLANOK) ---
     
     private void initFont() {
         try (InputStream in = getClass().getResourceAsStream("/fonts/arial.ttf")) {
             if (in == null) throw new Exception("Font not found");
             byte[] fontBytes = in.readAllBytes();
             ByteBuffer ttfBuffer = MemoryUtil.memAlloc(fontBytes.length).put(fontBytes).flip();
-            
             int bitmapW = 512, bitmapH = 512;
             ByteBuffer bitmap = MemoryUtil.memAlloc(bitmapW * bitmapH);
             cdata = STBTTBakedChar.malloc(96);
             stbtt_BakeFontBitmap(ttfBuffer, 24, bitmap, bitmapW, bitmapH, 32, cdata);
-            
             fontTexture = glGenTextures();
             glBindTexture(GL_TEXTURE_2D, fontTexture);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, bitmapW, bitmapH, 0, GL_RED, GL_UNSIGNED_BYTE, bitmap);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            
             MemoryUtil.memFree(bitmap);
             MemoryUtil.memFree(ttfBuffer);
         } catch (Exception e) {
@@ -699,8 +648,4 @@ public class Renderer {
         m[15] = 1f;
         return m;
     }
-    public float[] createModelMatrix(float x, float y, float w, float h) {
-        return new float[]{ w, 0, 0, 0, 0, h, 0, 0, 0, 0, 1, 0, x, y, 0, 1 };
-    }
-
 }

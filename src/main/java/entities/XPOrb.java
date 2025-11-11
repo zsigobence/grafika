@@ -4,9 +4,10 @@ import static org.lwjgl.glfw.GLFW.glfwGetTime;
 
 public class XPOrb extends GameObject {
     public final int value;
-    private final float magnetRadius = 70f;
-    private final float magnetBaseSpeed = 90f;
+    private float magnetRadius = 70f;
+    private float magnetBaseSpeed = 90f;
     private final float magnetPullForce = 200f;
+    private boolean magnetized = false;
 
     public XPOrb(float x, float y, int value) {
         super(x, y, 10);
@@ -14,6 +15,10 @@ public class XPOrb extends GameObject {
     }
     
     public void update(float deltaTime, Player player) {
+    	if(magnetized) {
+    		magnetRadius = 2000f;
+    	    magnetBaseSpeed = 300f;
+    	}
         float dx = player.x - x;
         float dy = player.y - y;
         float dist = (float) Math.hypot(dx, dy);
@@ -28,5 +33,9 @@ public class XPOrb extends GameObject {
             // Lebegés
             y += Math.sin(glfwGetTime() * 3.0f + this.hashCode()) * 6.0f * deltaTime;
         }
+    }
+    
+    public void setMagnetized(boolean magnetized) {
+        this.magnetized = magnetized;
     }
 }
