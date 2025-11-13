@@ -177,6 +177,7 @@ public class Renderer {
         drawXPOrbs(world);
         drawBullets(world);
         drawHealthBar(world);
+        drawVisualEffects(world);
         world.getGadgetSystem().renderLaserBullets(this);
 
         flushColorBatch();
@@ -210,6 +211,29 @@ public class Renderer {
         // --- 6. UI SZÖVEG (Immediate Mode) ---
         // A szöveg a saját shaderét használja, ezért marad utoljára.
         uiRenderer.renderText(world, camLeft, camTop);
+    }
+    
+    private void drawVisualEffects(GameWorld world) {
+        for (VisualEffect e : world.getVisualEffects()) {
+
+            if (e instanceof ExplosionEffect exp) {
+                float alpha = exp.getAlpha();
+                float size  = exp.size;
+
+                // külső halvány nagy glow
+                drawQuad(exp.x, exp.y, size * 1.6f, size * 1.6f,
+                         1f, 0.4f, 0.0f, alpha * 0.4f);
+
+                // belső erős fény
+                drawQuad(exp.x, exp.y, size, size,
+                         1f, 0.9f, 0.5f, alpha);
+            } else {
+                // régi, sima effekt
+                float alpha = e.getAlpha();
+                drawQuad(e.x, e.y, e.size, e.size,
+                         1f, 0.5f, 0.2f, alpha);
+            }
+        }
     }
     
     public float getTextWidth(String text, float scale) {

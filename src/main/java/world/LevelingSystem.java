@@ -6,6 +6,9 @@ import main.java.entities.FloatingText;
 import main.java.entities.Player;
 import main.java.entities.XPOrb;
 import main.java.systems.Gadget;
+import main.java.entities.BossEnemy;
+import main.java.entities.ExplosionEffect;
+
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -33,6 +36,13 @@ public class LevelingSystem {
         // A te esetedben az Enemy már importálta, így ez rendben van.
         world.score += enemy.type == main.java.entities.EnemyType.TANK ? 30 : 10;
         
+        if (enemy instanceof BossEnemy) {
+            world.getVisualEffects().add(
+                new ExplosionEffect(enemy.x, enemy.y, 350f, 1.0f)
+            );
+        }
+        
+        
         int lsLevel = world.getGadgetLevel("Life Steal");
         if (lsLevel > 0) {
             float chance = lsLevel * 0.03f;
@@ -48,27 +58,57 @@ public class LevelingSystem {
      * Felelős az XP növeléséért és a szintlépés indításáért.
      */
     public void onPlayerCollectedOrb(XPOrb orb) {
+
+        // XP nem gyűjtődik, ha menü nyitva van
+        if (world.levelUpMenuActive) {
+            return;
+        }
+
         world.xp += orb.value;
-        world.getFloatingTexts().add(new FloatingText(player.x, player.y - player.size, "+" + orb.value, 1.2f, -40.0f, 1.0f, 1.0f, 0.2f));
+        world.getFloatingTexts().add(new FloatingText(
+                player.x, player.y - player.size,
+                "+" + orb.value,
+                1.2f, -40.0f, 1.0f, 1.0f, 0.2f
+        ));
         SoundManager.playOverlap("xp");
 
-        if (world.xp >= world.xpToNext) {
+        // Számoljuk, hány szintet kell kiosztani
+        while (world.xp >= world.xpToNext) {
+            world.xp -= world.xpToNext;
+            world.level++;
+            world.xpToNext = calcXpForLevel(world.level);
+            world.pendingLevelUps++;
+        }
+
+        // Ha nincs nyitva menü ÉS van hátralévő szint → nyissunk egyet
+        if (!world.levelUpMenuActive && world.pendingLevelUps > 0) {
             levelUp();
         }
     }
+
+
 
     /**
      * A szintlépés teljes logikája.
      */
     private void levelUp() {
-        world.xp -= world.xpToNext;
-        world.level++;
-        world.xpToNext = calcXpForLevel(world.level);
-        world.getFloatingTexts().add(new FloatingText(player.x, player.y - player.size - 20, "Level Up!", 1.6f, -70.0f, 1.0f, 0.8f, 0.0f));
+
+        world.pendingLevelUps--;
+
         world.levelUpMenuActive = true;
+
+        world.getFloatingTexts().add(new FloatingText(
+                player.x,
+                player.y - player.size - 20,
+                "Level Up!",
+                1.6f, -70.0f, 1.0f, 0.8f, 0.0f
+        ));
+
         SoundManager.play("levelup");
+
         generateLevelUpOptions();
     }
+
 
     /**
      * Legenerálja a 3 választható gadgetet a szintlépés menühöz.
@@ -97,8 +137,18 @@ public class LevelingSystem {
         gadget.levelUp();
         world.recomputePlayerStats();
         world.levelUpMenuActive = false;
-        world.getFloatingTexts().add(new FloatingText(player.x, player.y, gadget.name + " +1", 1.5f, -50f, 0f, 1f, 0f));
+
+        world.getFloatingTexts().add(
+            new FloatingText(player.x, player.y, gadget.name + " +1",
+            1.5f, -50f, 0f, 1f, 0f)
+        );
+
+        // Ha több szint vár még kiosztásra → azonnal a következőt
+        if (world.pendingLevelUps > 0) {
+            levelUp();
+        }
     }
+
 
     /**
      * Kiszámolja a következő szinthez szükséges XP-t.
@@ -106,5 +156,23 @@ public class LevelingSystem {
     private int calcXpForLevel(int lvl) {
         double val = 100.0 * Math.pow(Math.min(1.45, 1.25 + lvl * 5), Math.max(0, lvl - 1));
         return Math.max(20, (int) Math.round(val));
+    }
+    private void showLevelUpMenu() {
+        world.levelUpMenuActive = true;
+        SoundManager.play("levelup");
+        generateLevelUpOptions();
+
+        world.getFloatingTexts().add(
+            new FloatingText(
+                player.x,
+                player.y - player.size - 20,
+                "Level Up!",
+                1.6f,
+                -70.0f,
+                1.0f,
+                0.8f,
+                0.0f
+            )
+        );
     }
 }

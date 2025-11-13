@@ -20,8 +20,8 @@ public class EnemySpawner {
     // Az első boss 60 másodperc (1 perc) után jön
     private double bossSpawnInterval = 60.0; 
     
-    // A többi boss 90 másodperc után jön
-    private final double subsequentBossInterval = 90.0; 
+    // A többi boss 120 másodperc után jön
+    private final double subsequentBossInterval = 120.0; 
     
     // Számláló a HP növeléséhez
     private int bossesSpawnedCount = 0;

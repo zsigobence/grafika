@@ -33,7 +33,7 @@ public class BossEnemy extends Enemy {
         this.bossType = bossType;
 
         this.size = 200f;
-        this.maxHp = 200;
+        this.maxHp = 300;
         this.hp = maxHp;
 
         TextureLoader textureLoader = TextureLoader.getInstance();
@@ -72,7 +72,6 @@ public class BossEnemy extends Enemy {
             flashTimer = 0.8f;
             phaseInvulnTimer = 1f;
             size *= 1.2f;
-            triggerExplosion();
             System.out.println(bossType + " entering Phase 3!");
         }
 
@@ -91,19 +90,24 @@ public class BossEnemy extends Enemy {
     }
 
     private void triggerExplosion() {
-        for (int i = 0; i < 40; i++) {
-            float angle = (float) (Math.random() * Math.PI * 2);
-            float speed = 150f + (float) Math.random() * 200f;
-            float vx = (float) Math.cos(angle) * speed;
-            float vy = (float) Math.sin(angle) * speed;
-            world.getBullets().add(new Bullet(x, y, vx, vy, Bullet.Owner.ENEMY));
-        }
+        world.getVisualEffects().add(new ExplosionEffect(x, y, 350f, 1.2f));
         SoundManager.playOverlap("laser");
     }
     
     @Override
+    public void onDeath() {
+        world.getVisualEffects().add(new ExplosionEffect(x, y, 350f, 1.2f));
+        SoundManager.playOverlap("laser");
+    }
+
+    
+    @Override
     public int getXp() {
-        return 400; 
+        return switch (bossType) {
+            case GHOST -> 200;   // gyors, könnyebb → kevesebb XP
+            case DEMON -> 300;   // tankosabb → több XP
+            case DRAGON -> 500;  // nehezebb, lövedék spammelő → sok XP
+        };
     }
 
     // 👻 GHOST — gyors, teleportál, kiszámíthatatlan
@@ -149,15 +153,14 @@ public class BossEnemy extends Enemy {
             // ha épp teleportál, számláljunk vissza; amikor lejár, átpakoljuk
             if (isTeleporting) {
                 teleportTimer -= dt;
-             // 💥 Kis energia-robbanás effekt (csak látvány)
-                for (int i = 0; i < 12; i++) {
-                    float angle = (float)(Math.random() * Math.PI * 2);
-                    float speed = 80f + (float)Math.random() * 120f;
-                    float vx = (float)Math.cos(angle) * speed;
-                    float vy = (float)Math.sin(angle) * speed;
-                    world.getBullets().add(new Bullet(x, y, vx, vy, Bullet.Owner.ENEMY));
-                }
+          
 
+                if (teleportTimer <= 0f) {
+                    x = teleportTargetX;
+                    y = teleportTargetY;
+                    isTeleporting = false;
+                    SoundManager.playOverlap("laser");
+                }
             }
         }
 
@@ -186,7 +189,7 @@ public class BossEnemy extends Enemy {
 
         // fázis 3: extra tűzgyűrű
         if (phase == 3 && abilityTimer > 5f) {
-            triggerExplosion();
+        	radialShot(24, 260f);
             abilityTimer = 0f;
         }
     }

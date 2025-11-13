@@ -32,6 +32,10 @@ public class GameWorld {
     public boolean levelUpMenuActive = false;
     private GadgetSystem gadgetSystem;
     private boolean gameOver = false;
+    public int pendingLevelUps = 0;
+    
+    private List<VisualEffect> visualEffects = new ArrayList<>();
+    public List<VisualEffect> getVisualEffects() { return visualEffects; }
 
     // --- RENDSZEREK ---
     private EnemySpawner enemySpawner;
@@ -98,6 +102,15 @@ public class GameWorld {
         
         // 5. Ütközések ellenőrzése (Ez már a gyors, rács-alapú rendszert használja)
         collisionSystem.checkCollisions();
+        
+        updateVisualEffects(deltaTime);
+    }
+    
+    private void updateVisualEffects(float dt) {
+        visualEffects.removeIf(e -> {
+            e.update(dt);
+            return e.isDead();
+        });
     }
     
     // Getter metódusok, hogy a Renderer és más osztályok hozzáférjenek az adatokhoz
@@ -140,6 +153,7 @@ public class GameWorld {
      * Továbbítjuk a LevelingSystem-nek.
      */
     public void killEnemy(Enemy enemy) {
+    	enemy.onDeath();
         levelingSystem.onEnemyKilled(enemy);
         enemies.remove(enemy);
     }

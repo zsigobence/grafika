@@ -78,6 +78,10 @@ public class Enemy extends Character {
             y += vy * deltaTime;
         }
     }
+    
+    public void onDeath() {
+        // alapértelmezés: semmi
+    }
 
     public int getXp() {
         return xpValue;
