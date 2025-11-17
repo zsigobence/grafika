@@ -86,15 +86,13 @@ public class Game {
     private void loop() {
         double lastTime = glfwGetTime();
         while (!glfwWindowShouldClose(window)) {
-        	if (gameWorld.isGameOver()) {
-                glfwSetWindowShouldClose(window, true);
-            }
             double currentTime = glfwGetTime();
             float deltaTime = (float) (currentTime - lastTime);
             lastTime = currentTime;
             
             accumulator += deltaTime;
             inputHandler.processInput(gameWorld.getPlayer());
+            glfwPollEvents();
 
             while (accumulator >= FIXED_TIMESTEP) {
                 gameWorld.update((float) FIXED_TIMESTEP);
@@ -103,7 +101,6 @@ public class Game {
             renderer.render(gameWorld);
 
             glfwSwapBuffers(window);
-            glfwPollEvents();
         }
     }
 

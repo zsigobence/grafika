@@ -15,8 +15,38 @@ public class InputHandler {
         this.gameWorld = gameWorld;
         
         glfwSetKeyCallback(window, (win, key, scancode, action, mods) -> {
-            if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-                glfwSetWindowShouldClose(win, true);
+            if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+                if (gameWorld.isGameOver()) {
+                    glfwSetWindowShouldClose(win, true);
+                } else if (!gameWorld.levelUpMenuActive) {
+                    gameWorld.togglePause();
+                }
+            }
+            
+            if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+                if (gameWorld.isGameOver()) {
+                    gameWorld.reset();
+                    return; 
+                }
+            }
+            
+            if (action == GLFW_PRESS && gameWorld.levelUpMenuActive) {
+                Gadget selectedGadget = null;
+                int availableCount = gameWorld.availableGadgets.size();
+
+                if (key == GLFW_KEY_1 && availableCount >= 1) {
+                    selectedGadget = gameWorld.availableGadgets.get(0);
+                } else if (key == GLFW_KEY_2 && availableCount >= 2) {
+                    selectedGadget = gameWorld.availableGadgets.get(1);
+                } else if (key == GLFW_KEY_3 && availableCount >= 3) {
+                    selectedGadget = gameWorld.availableGadgets.get(2);
+                }
+
+                if (selectedGadget != null) {
+                    gameWorld.selectGadget(selectedGadget);
+                    return; 
+                }
+            }
 
             boolean pressed = action == GLFW_PRESS || action == GLFW_REPEAT;
             if (key == GLFW_KEY_W) keyUp = pressed;

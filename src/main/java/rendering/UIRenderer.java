@@ -21,9 +21,14 @@ public class UIRenderer {
      * 1. LÉPÉS: Csak a színes quad-ok kirajzolása (Color Batch)
      */
     public void renderQuads(GameWorld world) {
-        renderHUDQuads(world);
+        renderHUDQuads(world); 
+        
         if (world.levelUpMenuActive) {
             renderLevelUpMenuQuads(world);
+        } else if (world.isPaused()) {
+            renderPauseMenuQuads(world);
+        } else if (world.isGameOver()) {
+            renderGameOverQuads(world);
         }
     }
     
@@ -42,10 +47,17 @@ public class UIRenderer {
      * 3. LÉPÉS: Csak a szöveg kirajzolása (Immediate Mode)
      */
     public void renderText(GameWorld world, float camLeft, float camTop) {
-        renderHUDText(world);
-        renderFloatingTexts(world, camLeft, camTop); 
+        renderHUDText(world); 
+        
+        if (!world.levelUpMenuActive && !world.isPaused() && !world.isGameOver()) {
+            renderFloatingTexts(world, camLeft, camTop); 
+        }
         if (world.levelUpMenuActive) {
             renderLevelUpMenuText(world);
+        } else if (world.isPaused()) { 
+            renderPauseMenuText(world);
+        } else if (world.isGameOver()) {
+            renderGameOverText(world);
         }
     }
 
@@ -152,7 +164,7 @@ public class UIRenderer {
     }
     
     private void renderFloatingTexts(GameWorld world, float camLeft, float camTop) {
-        if (world.levelUpMenuActive) return;
+    	if (world.levelUpMenuActive || world.isPaused() || world.isGameOver()) return;
         for (FloatingText ft : world.getFloatingTexts()) {
             float screenX = ft.x - camLeft;
             float screenY = ft.y - camTop;
@@ -249,6 +261,49 @@ public class UIRenderer {
             case "Laser Beam": return "Cooldown: " + Math.max(1f, 9f - gadget.level * 2) + "s -> " + Math.max(1f, 9f - nextLevel * 2) + "s";
             default: return "Upgrade";
         }
+    }
+    
+// --- ÚJ: PAUSE MENÜ ---
+    
+    private void renderPauseMenuQuads(GameWorld world) {
+        // Átlátszó fekete háttér
+        renderer.drawQuad(width / 2f, height / 2f, width, height, 0f, 0f, 0f, 0.7f);
+    }
+
+    private void renderPauseMenuText(GameWorld world) {
+        String title = "PAUSED";
+        renderer.renderText(title, width / 2f - renderer.getTextWidth(title, 1.5f) / 2f, 
+            height / 2f - 50f, 1.5f, 1f, 1f, 1f, 1f);
+        
+        String resume = "Press ESC to Resume";
+        renderer.renderText(resume, width / 2f - renderer.getTextWidth(resume, 1.0f) / 2f, 
+            height / 2f + 20f, 1.0f, 0.8f, 0.8f, 0.8f, 1f);
+    }
+
+    // --- ÚJ: GAME OVER KÉPERNYŐ ---
+
+    private void renderGameOverQuads(GameWorld world) {
+        // Sötétvörös, átlátszó háttér
+        renderer.drawQuad(width / 2f, height / 2f, width, height, 0.2f, 0f, 0f, 0.85f);
+    }
+
+    private void renderGameOverText(GameWorld world) {
+        String title = "GAME OVER";
+        renderer.renderText(title, width / 2f - renderer.getTextWidth(title, 2.0f) / 2f, 
+            height / 2f - 100f, 2.0f, 1f, 0.1f, 0.1f, 1f);
+        
+        String scoreText = "Final Score: " + world.score;
+        renderer.renderText(scoreText, width / 2f - renderer.getTextWidth(scoreText, 1.2f) / 2f, 
+            height / 2f, 1.2f, 1f, 1f, 1f, 1f);
+
+        String restart = "Press SPACE to Restart";
+        renderer.renderText(restart, width / 2f - renderer.getTextWidth(restart, 1.0f) / 2f, 
+            height / 2f + 80f, 1.0f, 0.8f, 0.8f, 0.8f, 1f);
+            
+        String exit = "(Press ESC to Exit)";
+        renderer.renderText(exit, width / 2f - renderer.getTextWidth(exit, 0.8f) / 2f, 
+            height / 2f + 120f, 0.8f, 0.6f, 0.6f, 0.6f, 1f);
+    
     }
     
     private String getGadgetTexturePath(String gadgetName) {

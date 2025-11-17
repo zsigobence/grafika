@@ -32,6 +32,7 @@ public class GameWorld {
     public boolean levelUpMenuActive = false;
     private GadgetSystem gadgetSystem;
     private boolean gameOver = false;
+    private boolean isPaused = false;
     public int pendingLevelUps = 0;
     
     private List<VisualEffect> visualEffects = new ArrayList<>();
@@ -45,29 +46,61 @@ public class GameWorld {
     
     // Javasolt cellaméret (az ellenségek méretéhez igazítva)
     private static final int GRID_CELL_SIZE = 200;
+    
+    
+    /**
+     * Visszaállítja a játékvilágot a kezdőállapotba.
+     * Nem tölti újra a hangokat, de minden mást igen.
+     */
+    public void reset() {
+        // Listák kiürítése
+        bullets.clear();
+        enemies.clear();
+        xpOrbs.clear();
+        floatingTexts.clear();
+        visualEffects.clear();
+        gadgets.clear();
+        availableGadgets.clear();
+        
+        // Statisztikák nullázása
+        score = 0;
+        xp = 0;
+        level = 1;
+        xpToNext = 50;
+        elapsedTime = 0.0;
+        pendingLevelUps = 0;
+        
+        // Állapotjelzők visszaállítása
+        levelUpMenuActive = false;
+        gameOver = false;
+        isPaused = false;
+        
+        // Játékos és rendszerek újrakészítése
+        player = new Player(worldWidth / 2.0f, worldHeight / 2.0f, 10, 1, 250f);
+        initGadgets(); // Ez újratölti az alap gadgeteket
+        recomputePlayerStats();
+        
+        // 1. Rács újrakészítése
+        spatialGrid = new SpatialGrid(worldWidth, worldHeight, GRID_CELL_SIZE);
+        
+        // 2. Többi rendszer újrakészítése
+        enemySpawner = new EnemySpawner(this, player);
+        levelingSystem = new LevelingSystem(this, player);
+        collisionSystem = new CollisionSystem(this, player, levelingSystem, spatialGrid);
+        gadgetSystem = new GadgetSystem(this, player);
+    }
 
 
     public void init() {
-        player = new Player(worldWidth / 2.0f, worldHeight / 2.0f, 10, 1, 250f);
-        initGadgets();
-        recomputePlayerStats();
+        // Először hívjuk az új reset metódust, ami beállít mindent
+        reset();
         
-        // Rendszerek inicializálása
-        
-        // 1. A Rács létrehozása
-        spatialGrid = new SpatialGrid(worldWidth, worldHeight, GRID_CELL_SIZE);
-        
-        // 2. Többi rendszer létrehozása (a rács átadásával)
-        enemySpawner = new EnemySpawner(this, player);
-        levelingSystem = new LevelingSystem(this, player);
-        collisionSystem = new CollisionSystem(this, player, levelingSystem, spatialGrid); // <-- MÓDOSÍTVA
-        gadgetSystem = new GadgetSystem(this, player);
-        
+        // A hangokat elég egyszer betölteni a játék indulásakor
         loadSounds();
     }
     
     public void update(float deltaTime) {
-        if (levelUpMenuActive) return;
+    	if (levelUpMenuActive || isPaused() || isGameOver()) return;
 
         elapsedTime += deltaTime;
         
@@ -123,7 +156,11 @@ public class GameWorld {
     public GadgetSystem getGadgetSystem() { return gadgetSystem; }
     public boolean isGameOver() { return gameOver; }
     public void setGameOver(boolean gameOver) { this.gameOver = gameOver; }
-
+    public boolean isPaused() { return isPaused; }
+    
+    public void togglePause() { 
+        this.isPaused = !this.isPaused; 
+    }
 
     /**
      * Golyók frissítése (csak mozgás és pályaelhagyás).
