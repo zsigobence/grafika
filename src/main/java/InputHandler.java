@@ -82,8 +82,8 @@ public class InputHandler {
     private void handleMouseClick(float mouseX, float mouseY) {
         if (gameWorld.levelUpMenuActive) {
             float boxW = 220f, boxH = 280f, gap = 20f;
-            float centerX = 800 / 2f; // window width
-            float startY = 600 / 2f; // window height
+            float centerX = 800 / 2f; 
+            float startY = 600 / 2f; 
 
             for (int i = 0; i < gameWorld.availableGadgets.size(); i++) {
                 float x = centerX + (i - (gameWorld.availableGadgets.size() - 1) / 2f) * (boxW + gap);

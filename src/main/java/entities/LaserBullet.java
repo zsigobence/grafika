@@ -14,14 +14,15 @@ public class LaserBullet extends Bullet {
     }
 
     public void onHit(Enemy e) {
-    	System.out.println(e.type);
-    	if(e instanceof BossEnemy boss) {
-    		boss.takeDamage(damage + pierce/2);
-    		pierce = 0;
-    	}else {
+        System.out.println(e.type);
+        if(e instanceof BossEnemy boss) {
+            // Boss ellen extra sebzés és teljes áthatolás-vesztés
+            boss.takeDamage(damage + pierce/2);
+            pierce = 0;
+        }else {
             e.takeDamage(damage);
             pierce--;
-    	}
+        }
         SoundManager.playOverlap("damage");
     }
 }

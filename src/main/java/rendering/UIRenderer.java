@@ -4,6 +4,7 @@ import main.java.entities.FloatingText;
 import main.java.systems.GadgetSystem;
 import main.java.systems.Gadget;
 import main.java.world.GameWorld;
+import main.java.config.AssetPaths;
 import main.java.entities.BossEnemy;
 
 public class UIRenderer {
@@ -17,9 +18,7 @@ public class UIRenderer {
     }
 
 
-    /**
-     * 1. LÉPÉS: Csak a színes quad-ok kirajzolása (Color Batch)
-     */
+    // Színes négyszögek renderelése (Batch)
     public void renderQuads(GameWorld world) {
         renderHUDQuads(world); 
         
@@ -32,9 +31,7 @@ public class UIRenderer {
         }
     }
     
-    /**
-     * 2. LÉPÉS: Csak a textúrák kirajzolása (Texture Batch)
-     */
+    // Textúrák renderelése (Batch)
     public void renderTextures(GameWorld world) {
         renderHUDTextures(world);
         if (world.levelUpMenuActive) {
@@ -43,9 +40,7 @@ public class UIRenderer {
     }
 
 
-    /**
-     * 3. LÉPÉS: Csak a szöveg kirajzolása (Immediate Mode)
-     */
+    // Szövegek renderelése (Immediate)
     public void renderText(GameWorld world, float camLeft, float camTop) {
         renderHUDText(world); 
         
@@ -61,10 +56,7 @@ public class UIRenderer {
         }
     }
 
-    // --- FELBONTOTT HUD RENDERELÉS ---
-
     private void renderHUDQuads(GameWorld world) {
-        // XP Bar (Csak a quadok)
         float barW = UIConstants.XP_BAR_WIDTH;
         float barH = UIConstants.XP_BAR_HEIGHT;
         float barX = width / 2.0f - barW / 2f;
@@ -81,11 +73,9 @@ public class UIRenderer {
     }
     
     private void renderHUDTextures(GameWorld world) {
-        // Magnet Ikon (Csak a textúra)
-        float iconSize = 64.0f; // Ikon mérete
-        float padding = 20.0f;  // Távolság a szélektől
+        float iconSize = 64.0f; 
+        float padding = 20.0f;  
 
-        // Pozíció (középpont): Jobb alsó sarok
         float iconCenterX = width - padding - iconSize / 2f;
         float iconCenterY = height - padding - iconSize / 2f;
         
@@ -98,24 +88,20 @@ public class UIRenderer {
     }
     
     private void renderHUDText(GameWorld world) {
-        // Score (Csak a szöveg)
         renderer.renderText("Score: " + world.score, 
             UIConstants.HUD_PADDING_X, UIConstants.HUD_SCORE_Y, 1.0f, 1f,1f,1f,1f);
         
-        // Timer (Csak a szöveg)
         int totalSeconds = (int) Math.floor(world.elapsedTime);
         String timeStr = String.format("%02d:%02d", totalSeconds / 60, totalSeconds % 60);
         float textW = renderer.getTextWidth(timeStr, 1.0f);
         renderer.renderText(timeStr, width - UIConstants.HUD_TIMER_PADDING_X - textW, 
             UIConstants.HUD_SCORE_Y, 1.0f, 1f, 1f, 1f, 1f);
 
-        // XP Bar (Csak a szöveg)
         String levelText = "Level: " + world.level;
         float levelTextWidth = renderer.getTextWidth(levelText, 1.0f);
         renderer.renderText(levelText, width / 2f - levelTextWidth / 2f, 
             UIConstants.XP_BAR_LEVEL_TEXT_Y, 1.0f, 1f, 1f, 1f, 1f);
         
-        // Magnet Cooldown (Csak a szöveg)
         float iconSize = 64.0f;
         float padding = 20.0f;
         float iconCenterX = width - padding - iconSize / 2f;
@@ -149,22 +135,17 @@ public class UIRenderer {
         float g = Math.min(1f, healthPercent * 2f);
         float b = 0.1f;
 
-        // Háttér
         renderer.drawQuad(centerX, centerY, barWidth, barHeight + 2f, 0.1f, 0.1f, 0.1f, 1f);
-        // HP kitöltés
         renderer.drawQuad(centerX - (barWidth - barWidth * healthPercent) / 2f,
                 centerY, barWidth * healthPercent, barHeight, r, g, b, 1f);
 
-        // Szöveg a csík alá - EZT ÁT KELLENE HELYEZNI A renderHUDText-be!
-        // De mivel a renderBossHealthBar a renderHUDQuads-ból hívódik, 
-        // a szöveget is itt rajzoljuk ki (mivel a renderText immediate módú).
         String text = "BOSS HP: " + (int) boss.hp + " / " + (int) boss.maxHp;
         float textWidth = renderer.getTextWidth(text, 1.0f);
         renderer.renderText(text, centerX - textWidth / 2f, centerY + 26f, 1.0f, 1f, 1f, 1f, 1f);
     }
     
     private void renderFloatingTexts(GameWorld world, float camLeft, float camTop) {
-    	if (world.levelUpMenuActive || world.isPaused() || world.isGameOver()) return;
+        if (world.levelUpMenuActive || world.isPaused() || world.isGameOver()) return;
         for (FloatingText ft : world.getFloatingTexts()) {
             float screenX = ft.x - camLeft;
             float screenY = ft.y - camTop;
@@ -186,10 +167,8 @@ public class UIRenderer {
             Gadget gadget = world.availableGadgets.get(i);
             float x = centerX + (i - (world.availableGadgets.size() - 1) / 2f) * (boxW + gap);
             
-            // Doboz quad
             renderer.drawQuad(x, startY, boxW, boxH, 0.4f, 0.4f, 0.4f, 1.0f);
 
-            // Level squares
             int max = gadget.maxLevel;
             float squareSize = UIConstants.LEVEL_UP_LEVEL_SQUARE_SIZE;
             float squareGap = UIConstants.LEVEL_UP_LEVEL_SQUARE_GAP;
@@ -214,7 +193,6 @@ public class UIRenderer {
             Gadget gadget = world.availableGadgets.get(i);
             float x = centerX + (i - (world.availableGadgets.size() - 1) / 2f) * (boxW + gap);
             
-            // Textúra
             String texturePath = getGadgetTexturePath(gadget.name);
             renderer.renderTexture(texturePath, x, startY + boxH/2f - UIConstants.LEVEL_UP_BOX_ICON_Y_FROM_BOTTOM, 
                 UIConstants.LEVEL_UP_BOX_ICON_SIZE, UIConstants.LEVEL_UP_BOX_ICON_SIZE);
@@ -222,7 +200,6 @@ public class UIRenderer {
     }
 
     private void renderLevelUpMenuText(GameWorld world) {
-        // Cím
         String title = "LEVEL UP! Choose a gadget:";
         renderer.renderText(title, width / 2f - renderer.getTextWidth(title, UIConstants.LEVEL_UP_TITLE_SCALE) / 2f, 
             UIConstants.LEVEL_UP_TITLE_Y, UIConstants.LEVEL_UP_TITLE_SCALE, 1f, 1f, 0f, 1f);
@@ -236,7 +213,6 @@ public class UIRenderer {
             Gadget gadget = world.availableGadgets.get(i);
             float x = centerX + (i - (world.availableGadgets.size() - 1) / 2f) * (boxW + gap);
 
-            // Szövegek
             renderer.renderText(gadget.name, x - renderer.getTextWidth(gadget.name, UIConstants.LEVEL_UP_BOX_TITLE_SCALE) / 2f, 
                 startY - boxH/2f + UIConstants.LEVEL_UP_BOX_TITLE_Y_OFFSET, UIConstants.LEVEL_UP_BOX_TITLE_SCALE, 1f, 1f, 1f, 1f);
             
@@ -246,8 +222,6 @@ public class UIRenderer {
         }
     }
 
-    // --- SEGÉDFÜGGVÉNYEK (VÁLTOZATLAN) ---
-    
     private String getNextLevelEffect(Gadget gadget) {
         int nextLevel = gadget.level + 1;
         switch (gadget.name) {
@@ -263,10 +237,7 @@ public class UIRenderer {
         }
     }
     
-// --- ÚJ: PAUSE MENÜ ---
-    
     private void renderPauseMenuQuads(GameWorld world) {
-        // Átlátszó fekete háttér
         renderer.drawQuad(width / 2f, height / 2f, width, height, 0f, 0f, 0f, 0.7f);
     }
 
@@ -280,10 +251,7 @@ public class UIRenderer {
             height / 2f + 20f, 1.0f, 0.8f, 0.8f, 0.8f, 1f);
     }
 
-    // --- ÚJ: GAME OVER KÉPERNYŐ ---
-
     private void renderGameOverQuads(GameWorld world) {
-        // Sötétvörös, átlátszó háttér
         renderer.drawQuad(width / 2f, height / 2f, width, height, 0.2f, 0f, 0f, 0.85f);
     }
 
@@ -309,21 +277,21 @@ public class UIRenderer {
     private String getGadgetTexturePath(String gadgetName) {
         switch (gadgetName) {
             case "Attack Damage":
-                return "src/main/assets/damage.png";
+                return AssetPaths.TEXTURE_UI_DAMAGE;
             case "Attack Speed":
-                return "src/main/assets/attack_speed.png";
+                return AssetPaths.TEXTURE_UI_ATTACK_SPEED;
             case "Max HP":
-                return "src/main/assets/heart.png";
+                return AssetPaths.TEXTURE_UI_HEART;
             case "Movement Speed":
-                return "src/main/assets/move_speed.png";
+                return AssetPaths.TEXTURE_UI_MOVE_SPEED;
             case "Multi Attack":
-                return "src/main/assets/multishot.png";
+                return AssetPaths.TEXTURE_UI_MULTISHOT;
             case "Life Steal":
-                return "src/main/assets/heart_half.png";
+                return AssetPaths.TEXTURE_UI_HEART_HALF;
             case "Orbit Blade":
-                return "src/main/assets/blade.png";
+                return AssetPaths.TEXTURE_BLADE;
             case "Laser Beam":
-                return "src/main/assets/laser.png";
+                return AssetPaths.TEXTURE_UI_LASER;
             default:
                 return "";
         }

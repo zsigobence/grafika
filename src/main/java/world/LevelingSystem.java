@@ -24,16 +24,9 @@ public class LevelingSystem {
         this.player = player;
     }
 
-    /**
-     * Akkor hívódik, amikor egy ellenség meghal (CollisionSystem vagy GadgetSystem által).
-     * Felelős az XP orb létrehozásáért, a pontszám növeléséért és a Life Steal-ért.
-     */
     public void onEnemyKilled(Enemy enemy) {
         world.getXPOrbs().add(new XPOrb(enemy.x, enemy.y, enemy.getXp()));
-        // Helyesbítés: EnemyType lekérdezése az EnemyType enum-ból (ha nincs importálva)
-        // Mivel az Enemy-ben van 'type' mező, feltételezzük, hogy az EnemyType importálva van
-        // (Vagy az Enemy-ben kellene importálni: import main.java.entities.EnemyType;)
-        // A te esetedben az Enemy már importálta, így ez rendben van.
+        
         world.score += enemy.type == main.java.entities.EnemyType.TANK ? 30 : 10;
         
         if (enemy instanceof BossEnemy) {
@@ -53,13 +46,8 @@ public class LevelingSystem {
         }
     }
 
-    /**
-     * Akkor hívódik, amikor a CollisionSystem játékos-XP orb ütközést észlel.
-     * Felelős az XP növeléséért és a szintlépés indításáért.
-     */
     public void onPlayerCollectedOrb(XPOrb orb) {
 
-        // XP nem gyűjtődik, ha menü nyitva van
         if (world.levelUpMenuActive) {
             return;
         }
@@ -72,7 +60,7 @@ public class LevelingSystem {
         ));
         SoundManager.playOverlap("xp");
 
-        // Számoljuk, hány szintet kell kiosztani
+        // Szintlépések kezelése
         while (world.xp >= world.xpToNext) {
             world.xp -= world.xpToNext;
             world.level++;
@@ -80,17 +68,11 @@ public class LevelingSystem {
             world.pendingLevelUps++;
         }
 
-        // Ha nincs nyitva menü ÉS van hátralévő szint → nyissunk egyet
         if (!world.levelUpMenuActive && world.pendingLevelUps > 0) {
             levelUp();
         }
     }
 
-
-
-    /**
-     * A szintlépés teljes logikája.
-     */
     private void levelUp() {
 
         world.pendingLevelUps--;
@@ -110,9 +92,6 @@ public class LevelingSystem {
     }
 
 
-    /**
-     * Legenerálja a 3 választható gadgetet a szintlépés menühöz.
-     */
     private void generateLevelUpOptions() {
         world.availableGadgets.clear();
         List<Gadget> nonMaxGadgets = new ArrayList<>();
@@ -124,15 +103,10 @@ public class LevelingSystem {
         Collections.shuffle(nonMaxGadgets);
         int count = Math.min(3, nonMaxGadgets.size());
         for (int i = 0; i < count; i++) {
-            // ❗️ JAVÍTÁS ITT:
-            // A 'world.' referencia hiányzott.
             world.availableGadgets.add(nonMaxGadgets.get(i));
         }
     }
 
-    /**
-     * Az InputHandler hívja meg, amikor a játékos kiválaszt egy gadgetet.
-     */
     public void selectGadget(Gadget gadget) {
         gadget.levelUp();
         world.recomputePlayerStats();
@@ -143,36 +117,14 @@ public class LevelingSystem {
             1.5f, -50f, 0f, 1f, 0f)
         );
 
-        // Ha több szint vár még kiosztásra → azonnal a következőt
         if (world.pendingLevelUps > 0) {
             levelUp();
         }
     }
 
-
-    /**
-     * Kiszámolja a következő szinthez szükséges XP-t.
-     */
     private int calcXpForLevel(int lvl) {
         double val = 100.0 * Math.pow(Math.min(1.45, 1.25 + lvl * 5), Math.max(0, lvl - 1));
         return Math.max(20, (int) Math.round(val));
     }
-    private void showLevelUpMenu() {
-        world.levelUpMenuActive = true;
-        SoundManager.play("levelup");
-        generateLevelUpOptions();
 
-        world.getFloatingTexts().add(
-            new FloatingText(
-                player.x,
-                player.y - player.size - 20,
-                "Level Up!",
-                1.6f,
-                -70.0f,
-                1.0f,
-                0.8f,
-                0.0f
-            )
-        );
-    }
 }

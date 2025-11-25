@@ -30,10 +30,11 @@ public class SoundManager {
     private static final List<Integer> sourcePool = new ArrayList<>();
     private static int currentPoolIndex = 0;
 
-    // Inicializálás
     public static void init() {
         if (initialized) return;
         initialized = true;
+        
+        // OpenAL eszköz és kontextus létrehozása
         device = ALC10.alcOpenDevice((CharSequence) null);
         if (device == NULL) {
             throw new IllegalStateException("Nem sikerült megnyitni az alapértelmezett hang eszközt!");
@@ -50,6 +51,7 @@ public class SoundManager {
         System.out.println("OpenAL inicializálva");
         AL10.alDistanceModel(AL10.AL_NONE);
         
+        // Hangforrás pool feltöltése a párhuzamos lejátszáshoz
         for (int i = 0; i < POOL_SIZE; i++) {
             int source = AL10.alGenSources();
             checkError("alGenSources (pool)");
@@ -58,7 +60,6 @@ public class SoundManager {
         System.out.println("SoundManager source pool létrehozva " + POOL_SIZE + " forrással.");
     }
 
-    // Hang betöltése (.ogg)
     public static void loadSound(String name, String path) {
         if (!Files.exists(Paths.get(path))) {
             throw new RuntimeException("Hangfájl nem található: " + path);
@@ -68,6 +69,7 @@ public class SoundManager {
             IntBuffer channelsBuffer = stack.mallocInt(1);
             IntBuffer sampleRateBuffer = stack.mallocInt(1);
 
+            // Vorbis dekódolás
             ShortBuffer rawAudio = stb_vorbis_decode_filename(path, channelsBuffer, sampleRateBuffer);
             if (rawAudio == null) {
                 throw new RuntimeException("Nem sikerült betölteni: " + path);
@@ -90,6 +92,7 @@ public class SoundManager {
             AL10.alBufferData(buffer, format, rawAudio, sampleRate);
             checkError("alBufferData");
 
+            // Dedikált forrás létrehozása az alap lejátszáshoz
             int source = AL10.alGenSources();
             checkError("alGenSources");
             AL10.alSourcei(source, AL10.AL_BUFFER, buffer);
@@ -112,11 +115,9 @@ public class SoundManager {
         }
     }
 
-    // Lejátszás
     public static void play(String name) {
         Integer source = sources.get(name);
         if (source != null) {
-            System.out.println("▶️ play('" + name + "') Source=" + source);
             AL10.alSourceStop(source);
             AL10.alSourcei(source, AL10.AL_LOOPING, AL10.AL_FALSE);
             checkError("alSourcei (looping=false)");
@@ -127,11 +128,9 @@ public class SoundManager {
         }
     }
 
-    // Loop (háttérzene)
     public static void loop(String name) {
         Integer source = sources.get(name);
         if (source != null) {
-            System.out.println("🔁 loop('" + name + "') Source=" + source);
             AL10.alSourcei(source, AL10.AL_LOOPING, AL10.AL_TRUE);
             checkError("alSourcei (looping=true)");
             AL10.alSourcePlay(source);
@@ -139,17 +138,14 @@ public class SoundManager {
         }
     }
 
-    // Megállítás
     public static void stop(String name) {
         Integer source = sources.get(name);
         if (source != null) {
-            System.out.println("⏹ stop('" + name + "') Source=" + source);
             AL10.alSourceStop(source);
             checkError("alSourceStop");
         }
     }
     
-    // Ellenőrzi, hogy a hang éppen szól-e
     public static boolean isPlaying(String name) {
         Integer source = sources.get(name);
         if (source == null) return false;
@@ -159,7 +155,7 @@ public class SoundManager {
         return state == AL10.AL_PLAYING;
     }
     
- // Többszörös lejátszás ugyanabból a hangból
+    // Hang lejátszása átfedéssel (poolból választott forrással)
     public static void playOverlap(String name) {
         Integer buffer = buffers.get(name);
         if (buffer == null) {
@@ -168,6 +164,8 @@ public class SoundManager {
         }
         int source = findFreeSource();
         float volume = 1.0f; 
+        
+        // Eredeti forrás hangerejének átvétele
         Integer dedicatedSource = sources.get(name);
         if (dedicatedSource != null) {
             try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -184,6 +182,7 @@ public class SoundManager {
         checkError("alSourcePlay (overlap)");
     }
 
+    // Szabad forrás keresése a poolban (Round-Robin)
     private static int findFreeSource() {
         for (int i = 0; i < POOL_SIZE; i++) {
             currentPoolIndex = (currentPoolIndex + 1) % POOL_SIZE;
@@ -198,6 +197,8 @@ public class SoundManager {
                 return source;
             }
         }
+        
+        // Ha nincs szabad, ellopjuk a legrégebbit
         currentPoolIndex = (currentPoolIndex + 1) % POOL_SIZE;
         int sourceToSteal = sourcePool.get(currentPoolIndex);
         
@@ -209,29 +210,23 @@ public class SoundManager {
         return sourceToSteal;
     }
 
-
-    // Takarítás
     public static void cleanup() {
         if (!initialized) return;
         initialized = false;
         for (int source : sources.values()) {
             AL10.alDeleteSources(source);
-            checkError("alDeleteSources");
         }
         for (int source : sourcePool) {
             AL10.alDeleteSources(source);
         }
         sourcePool.clear();
-        checkError("alDeleteSources (pool)");
         for (int buffer : buffers.values()) {
             AL10.alDeleteBuffers(buffer);
-            checkError("alDeleteBuffers");
         }
         ALC10.alcDestroyContext(context);
         ALC10.alcCloseDevice(device);
     }
 
-    // --- Segéd függvény hibákhoz ---
     private static void checkError(String msg) {
         int err = AL10.alGetError();
         if (err != AL10.AL_NO_ERROR) {

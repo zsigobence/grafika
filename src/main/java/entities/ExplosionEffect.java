@@ -8,10 +8,10 @@ public class ExplosionEffect extends VisualEffect {
     private float endSize;
 
     public ExplosionEffect(float x, float y, float maxSize, float duration) {
-        super(x, y, 0f);      // <-- itt kell 3 paraméter: kezdetben 0 méret
+        super(x, y, 0f); // Kezdeti méret 0, az animáció során növekszik
         this.life = duration;
         this.maxLife = duration;
-        this.startSize = 40f; // kicsi induló méret
+        this.startSize = 40f;
         this.endSize = maxSize;
         this.size = startSize;
     }
@@ -21,9 +21,9 @@ public class ExplosionEffect extends VisualEffect {
         life -= dt;
         if (life < 0) life = 0;
 
-        float t = 1f - (life / maxLife); // 0 → 1 között
+        float t = 1f - (life / maxLife);
 
-        // méret nő
+        // Lineáris interpoláció a méret növeléséhez
         this.size = startSize + (endSize - startSize) * t;
     }
 
@@ -35,7 +35,7 @@ public class ExplosionEffect extends VisualEffect {
     @Override
     public float getAlpha() {
         float t = 1f - (life / maxLife);
-        return 1f - t; // elején 1, aztán lassan 0 felé
+        return 1f - t; // Az átlátszóság csökken az idő múlásával
     }
 
     public float getProgress() {

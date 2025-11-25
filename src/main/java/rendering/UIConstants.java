@@ -3,11 +3,12 @@ package main.java.rendering;
 
 public class UIConstants {
 
-    // --- HUD ---
+    // HUD pozicionálás
     public static final float HUD_PADDING_X = 20f;
     public static final float HUD_SCORE_Y = 40f;
     public static final float HUD_TIMER_PADDING_X = 20f;
     
+    // XP sáv beállításai
     public static final float XP_BAR_LEVEL_TEXT_Y = 30f;
     public static final float XP_BAR_Y_OFFSET = 26f;
     public static final float XP_BAR_WIDTH = 220f;
@@ -15,14 +16,14 @@ public class UIConstants {
     public static final float XP_BAR_INSET = 2f; 
 
 
-    // --- Gadget Lista (bal alsó) ---
+    // Gadget lista (bal alsó sarok)
     public static final float GADGET_LIST_X = 20f;
     public static final float GADGET_LIST_Y_FROM_BOTTOM = 100f;
     public static final float GADGET_LIST_LINE_HEIGHT = 15f;
     public static final float GADGET_LIST_TITLE_SCALE = 0.8f;
     public static final float GADGET_LIST_ITEM_SCALE = 0.7f;
 
-    // --- Level Up Menü ---
+    // Szintlépés menü
     public static final float LEVEL_UP_BG_ALPHA = 0.7f;
     public static final float LEVEL_UP_TITLE_Y = 60f;
     public static final float LEVEL_UP_TITLE_SCALE = 1.2f;

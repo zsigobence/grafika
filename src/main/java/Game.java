@@ -6,6 +6,7 @@ import main.java.world.GameWorld;
 import org.lwjgl.glfw.GLFWVidMode;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryStack;
+import main.java.config.Config;
 
 import java.nio.IntBuffer;
 
@@ -16,7 +17,6 @@ import static org.lwjgl.system.MemoryUtil.NULL;
 
 public class Game {
     private long window;
-    private final int width = 800, height = 600;
 
     private GameWorld gameWorld;
     private Renderer renderer;
@@ -52,9 +52,13 @@ public class Game {
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-        window = glfwCreateWindow(width, height, "Top-Down Shooter - VampireStyle", NULL, NULL);
+        window = glfwCreateWindow(Config.WINDOW_WIDTH, 
+                Config.WINDOW_HEIGHT, 
+                Config.WINDOW_TITLE, 
+                NULL, NULL);
         if (window == NULL) throw new RuntimeException("Nem sikerült létrehozni az ablakot");
 
+        // Ablak középre igazítása a monitoron
         try (MemoryStack stack = MemoryStack.stackPush()) {
             IntBuffer pWidth = stack.mallocInt(1);
             IntBuffer pHeight = stack.mallocInt(1);
@@ -66,15 +70,16 @@ public class Game {
         }
 
         glfwMakeContextCurrent(window);
-        glfwSwapInterval(1);
+        glfwSwapInterval(1); // V-Sync bekapcsolása
         glfwShowWindow(window);
         GL.createCapabilities();
         System.out.println("OpenGL verzió: " + glGetString(GL_VERSION));
 
         SoundManager.init();
         
+        // Fő rendszerek példányosítása
         gameWorld = new GameWorld();
-        renderer = new Renderer(width, height);
+        renderer = new Renderer(Config.WINDOW_WIDTH, Config.WINDOW_HEIGHT);
         inputHandler = new InputHandler(window, gameWorld);
         
         gameWorld.init();
@@ -94,12 +99,13 @@ public class Game {
             inputHandler.processInput(gameWorld.getPlayer());
             glfwPollEvents();
 
+            // Fizikai frissítés fix időlépéssel
             while (accumulator >= FIXED_TIMESTEP) {
                 gameWorld.update((float) FIXED_TIMESTEP);
                 accumulator -= FIXED_TIMESTEP;
             }
+            
             renderer.render(gameWorld);
-
             glfwSwapBuffers(window);
         }
     }

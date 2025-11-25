@@ -6,9 +6,6 @@ import main.java.world.GameWorld;
 
 public class BossEnemy extends Enemy {
 
-    public enum BossType { GHOST, DEMON, DRAGON }
-
-    // private final GameWorld world; // <-- TÖRÖLVE (már az ősosztályban van)
     private final BossType bossType;
     private final TextureLoader.TextureInfo textureInfo;
 
@@ -19,17 +16,15 @@ public class BossEnemy extends Enemy {
     private float phaseInvulnTimer = 0f;
     private float shootTimer = 0f;
     private float abilityTimer = 0f;
- // Ghost teleporthoz
- // Teleport FSM
+ 
     private boolean isTeleporting = false;
-    private float teleportTimer = 0f;         // visszaszámláló a váltásig
-    private float teleportDelay = 0.6f;      // ennyi ideig “eltűnik” (windup)
+    private float teleportTimer = 0f;
+    private float teleportDelay = 0.6f;
     private float teleportTargetX, teleportTargetY;
 
 
     public BossEnemy(float x, float y, EnemyType type, GameWorld world, BossType bossType) {
-        super(x, y, 0, 0, type, world); // <-- MÓDOSÍTVA: 'world' átadva az ősnek
-        // this.world = world; // <-- TÖRÖLVE
+        super(x, y, 0, 0, type, world);
         this.bossType = bossType;
 
         this.size = 200f;
@@ -58,7 +53,7 @@ public class BossEnemy extends Enemy {
         if (flashTimer > 0f) flashTimer -= deltaTime;
         if (phaseInvulnTimer > 0f) phaseInvulnTimer -= deltaTime;
 
-        // --- Fázisváltás ---
+        // Fázisváltás ellenőrzése életerő alapján
         if (phase == 1 && hp < maxHp * 0.6f && !phase2Started) {
             phase = 2;
             phase2Started = true;
@@ -75,7 +70,6 @@ public class BossEnemy extends Enemy {
             System.out.println(bossType + " entering Phase 3!");
         }
 
-        // --- Egyedi viselkedés bossType szerint ---
         switch (bossType) {
             case GHOST -> updateGhost(player, deltaTime);
             case DEMON -> updateDemon(player, deltaTime);
@@ -89,10 +83,6 @@ public class BossEnemy extends Enemy {
         super.takeDamage(amount);
     }
 
-    private void triggerExplosion() {
-        world.getVisualEffects().add(new ExplosionEffect(x, y, 350f, 1.2f));
-        SoundManager.playOverlap("laser");
-    }
     
     @Override
     public void onDeath() {
@@ -104,57 +94,46 @@ public class BossEnemy extends Enemy {
     @Override
     public int getXp() {
         return switch (bossType) {
-            case GHOST -> 200;   // gyors, könnyebb → kevesebb XP
-            case DEMON -> 300;   // tankosabb → több XP
-            case DRAGON -> 500;  // nehezebb, lövedék spammelő → sok XP
+            case GHOST -> 200;
+            case DEMON -> 300;
+            case DRAGON -> 500;
         };
     }
 
-    // 👻 GHOST — gyors, teleportál, kiszámíthatatlan
- // 👻 GHOST — tényleges, jól látható teleport a pálya másik oldalára
+    // Szellem típusú boss viselkedése: teleportálás és lövés
     private void updateGhost(Player player, float dt) {
         shootTimer += dt;
         abilityTimer += dt;
 
-        // Lövés
         if (shootTimer > 2.0f) {
             shootAtPlayer(player, 1, 0f);
             shootTimer = 0f;
         }
 
-        // Teleport minden 4 másodpercben (fázis 2-től)
-     // TELEPORT – fázis 2-től
+        // Teleportációs logika a második fázistól
         if (phase >= 2) {
-            // ha nem épp teleportál és lejárt a képesség CD-je, indítsunk windupot
             if (!isTeleporting && abilityTimer > 4.0f) {
-                // célpont: PÁLYA MÁSIK OLDALA (amit kértél)
-                boolean horizontal = Math.random() < 0.5;
 
-             // célpont: játékos körül 400–700 egységre, random irányban
                 float distance = 400f + (float)Math.random() * 300f;
                 double angle = Math.random() * Math.PI * 2;
                 float newX = player.x + (float)Math.cos(angle) * distance;
                 float newY = player.y + (float)Math.sin(angle) * distance;
 
 
-                // határok közé
                 teleportTargetX = Math.max(50, Math.min(world.worldWidth  - 50, newX));
                 teleportTargetY = Math.max(50, Math.min(world.worldHeight - 50, newY));
 
-                // windup: eltűnik rövid időre
                 isTeleporting = true;
                 teleportTimer = teleportDelay;
-                flashTimer = teleportDelay;            // vizuális jelzés
-                SoundManager.playOverlap("damage");    // “eltűnés” hang
+                flashTimer = teleportDelay;
+                SoundManager.playOverlap("damage");
 
-                abilityTimer = 0f; // CD újraindít
+                abilityTimer = 0f;
             }
 
-            // ha épp teleportál, számláljunk vissza; amikor lejár, átpakoljuk
             if (isTeleporting) {
                 teleportTimer -= dt;
           
-
                 if (teleportTimer <= 0f) {
                     x = teleportTargetX;
                     y = teleportTargetY;
@@ -166,10 +145,8 @@ public class BossEnemy extends Enemy {
 
     }
 
-
-    // 😈 DEMON — közelharc + körlövés
+    // Démon típusú boss viselkedése: közelharc és körkörös lövés
     private void updateDemon(Player player, float dt) {
-        // fázis szerint változó támadások
         if (phase == 1 && shootTimer > 2.0f) {
             radialShot(8, 200f);
             shootTimer = 0f;
@@ -178,7 +155,6 @@ public class BossEnemy extends Enemy {
             shootTimer = 0f;
         }
 
-        // közelharci mozgás
         float dx = player.x - x;
         float dy = player.y - y;
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
@@ -187,24 +163,21 @@ public class BossEnemy extends Enemy {
             y += (dy / dist) * 120 * dt;
         }
 
-        // fázis 3: extra tűzgyűrű
         if (phase == 3 && abilityTimer > 5f) {
-        	radialShot(24, 260f);
+            radialShot(24, 260f);
             abilityTimer = 0f;
         }
     }
 
-    // 🐉 DRAGON — tűzgyűrű + nagy támadások
+    // Sárkány típusú boss viselkedése: irányított és körkörös tűz
     private void updateDragon(Player player, float dt) {
-        // 1. normál támadás (irányított golyók)
         if (shootTimer > 1.2f) {
             shootAtPlayer(player, 5, (float) Math.toRadians(15));
             shootTimer = 0f;
         }
 
-        // 2. fázis 2-től teljes körlövés
         if (phase >= 2 && abilityTimer > 3f) {
-            int bulletCount = (phase == 3) ? 40 : 24; // fázis 3-ban még több
+            int bulletCount = (phase == 3) ? 40 : 24;
             float speed = (phase == 3) ? 400f : 300f;
             radialShot(bulletCount, speed);
 
@@ -213,7 +186,6 @@ public class BossEnemy extends Enemy {
             System.out.println("🐉 Dragon unleashed fire ring (" + bulletCount + " bullets)");
         }
 
-        // 3. lassú mozgás a játékos felé
         float dx = player.x - x;
         float dy = player.y - y;
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
@@ -223,8 +195,6 @@ public class BossEnemy extends Enemy {
         }
     }
 
-
-    // --- Lövési segédfüggvények ---
     private void shootAtPlayer(Player player, int count, float spread) {
         float baseAngle = (float) Math.atan2(player.y - y, player.x - x);
         for (int i = 0; i < count; i++) {
@@ -244,7 +214,6 @@ public class BossEnemy extends Enemy {
         }
     }
 
-    // --- Getterek a Renderer-nek ---
     public int getPhase() { return phase; }
     public float getFlashTimer() { return flashTimer; }
     public BossType getBossType() { return bossType; }

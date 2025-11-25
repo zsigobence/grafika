@@ -26,17 +26,15 @@ public class Player extends Character {
     }
 
     public void update(float deltaTime, List<Enemy> enemies) {
-        // Movement
         if (moveX != 0 || moveY != 0) {
             float len = (float) Math.sqrt(moveX * moveX + moveY * moveY);
             x += (moveX / len) * moveSpeed * deltaTime;
             y += (moveY / len) * moveSpeed * deltaTime;
         }
-        // Clamp position to world bounds (example)
+        // Pozíció határolása a pályán belül
         x = Math.max(size / 2, Math.min(2000 - size / 2, x));
         y = Math.max(size / 2, Math.min(2000 - size / 2, y));
 
-        // Cooldown
         shootCooldown -= deltaTime;
     }
 

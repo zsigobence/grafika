@@ -1,6 +1,7 @@
 package main.java.world;
 
 import main.java.entities.BossEnemy;
+import main.java.entities.BossType;
 import main.java.entities.Enemy;
 import main.java.entities.EnemyType;
 import main.java.entities.Player;
@@ -14,18 +15,13 @@ public class EnemySpawner {
     private final float baseEnemySpawnInterval = 0.9f;
     private float enemySpawnInterval = baseEnemySpawnInterval;
     
-    // --- MÓDOSÍTOTT BOSS VÁLTOZÓK ---
     private double bossSpawnTimer = 0.0;
     
-    // Az első boss 60 másodperc (1 perc) után jön
     private double bossSpawnInterval = 60.0; 
     
-    // A többi boss 120 másodperc után jön
     private final double subsequentBossInterval = 120.0; 
     
-    // Számláló a HP növeléséhez
     private int bossesSpawnedCount = 0;
-    // --- MÓDOSÍTÁS VÉGE ---
 
     public EnemySpawner(GameWorld world, Player player) {
         this.world = world;
@@ -33,22 +29,18 @@ public class EnemySpawner {
     }
 
     public void update(float deltaTime) {
-        // 🔒 Ne spawnoljon normál enemy, ha van legalább 1 boss a pályán
+        // Boss logika: ha van boss, nem jön más
         boolean bossPresent = world.getEnemies().stream().anyMatch(e -> e instanceof BossEnemy);
         if (bossPresent) {
-            // Ha boss aktív, csak a boss timer frissüljön
             bossSpawnTimer += deltaTime;
 
-            // Ha még kevesebb, mint 3 boss van, idővel jöhet új
-            // --- MÓDOSÍTOTT BOSS LOGIKA (ha már van boss) ---
             if (bossSpawnTimer >= bossSpawnInterval) {
                 
-                // Ha ez volt az első boss (count=0), állítsuk át az időközt 120mp-re
                 if (bossesSpawnedCount == 0) {
                     bossSpawnInterval = subsequentBossInterval;
                 }
                 
-                bossSpawnTimer = 0.0; // Időzítő nullázása
+                bossSpawnTimer = 0.0; 
                 long activeBosses = world.getEnemies().stream().filter(e -> e instanceof BossEnemy).count();
 
                 if (activeBosses < 3) {
@@ -60,37 +52,32 @@ public class EnemySpawner {
                     by = Math.max(50, Math.min(world.worldHeight - 50, by));
 
                     double roll = Math.random();
-                    BossEnemy.BossType bossType;
-                    if (roll < 0.33) bossType = BossEnemy.BossType.GHOST;
-                    else if (roll < 0.66) bossType = BossEnemy.BossType.DEMON;
-                    else bossType = BossEnemy.BossType.DRAGON;
+                    BossType bossType;
+                    if (roll < 0.33) bossType = BossType.GHOST;
+                    else if (roll < 0.66) bossType = BossType.DEMON;
+                    else bossType = BossType.DRAGON;
 
                     BossEnemy boss = new BossEnemy(bx, by, EnemyType.TANK, world, bossType);
                     
-                    // HP NÖVELÉS:
-                    // 1. boss (count=0): 1.0 + (1 * 0.2) = 1.2 (+20%)
-                    // 2. boss (count=1): 1.0 + (2 * 0.2) = 1.4 (+40% az alaphoz képest)
-                    // 3. boss (count=2): 1.0 + (3 * 0.2) = 1.6 (+60% az alaphoz képest)
+                    // Boss életerő növelése minden megjelenéskor
                     boss.maxHp *= (1.0f + ((bossesSpawnedCount + 1) * 0.2f));
                     boss.hp = boss.maxHp;
                     
-                    bossesSpawnedCount++; // Növeljük a számlálót
+                    bossesSpawnedCount++; 
 
                     world.getEnemies().add(boss);
                     System.out.println("Boss spawned! Total bosses so far: " + bossesSpawnedCount);
 
-                    // 🧹 Minden kis ellenség eltűnik, csak a boss marad
+                    // Kis ellenségek törlése
                     world.getEnemies().removeIf(e -> !(e instanceof BossEnemy));
                 }
             }
-            // --- MÓDOSÍTÁS VÉGE ---
-            return; // ⛔ Kilépünk, nem spawnolunk normál enemy-t
+            return; 
         }
 
-        // --- NORMÁL ENEMY SPAWN (ha nincs boss) ---
-        // (Ez a rész változatlan maradt)
+        // Normál ellenség spawn logika
         int minutesElapsed = (int) (world.elapsedTime / 60.0);
-        int difficultyStages = minutesElapsed; // Percenként nehezedik (ahogy kérted)
+        int difficultyStages = minutesElapsed; 
         float spawnMultiplier = Math.max(0.25f, 1.0f - 0.25f * minutesElapsed);
         enemySpawnInterval = baseEnemySpawnInterval * spawnMultiplier;
         enemySpawnTimer += deltaTime;
@@ -119,17 +106,15 @@ public class EnemySpawner {
             world.getEnemies().add(spawned);
         }
 
-        // --- BOSS TIMER FRISSÍTÉS (ha épp nincs boss) ---
-        // --- MÓDOSÍTOTT BOSS LOGIKA (ha még nincs boss) ---
+        // Boss időzítő frissítése
         bossSpawnTimer += deltaTime;
         if (bossSpawnTimer >= bossSpawnInterval) {
             
-            // Ha ez volt az első boss (count=0), állítsuk át az időközt 120mp-re
             if (bossesSpawnedCount == 0) {
                 bossSpawnInterval = subsequentBossInterval;
             }
             
-            bossSpawnTimer = 0.0; // Időzítő nullázása
+            bossSpawnTimer = 0.0; 
             long activeBosses = world.getEnemies().stream().filter(e -> e instanceof BossEnemy).count();
 
             if (activeBosses < 3) {
@@ -141,26 +126,23 @@ public class EnemySpawner {
                 by = Math.max(50, Math.min(world.worldHeight - 50, by));
 
                 double roll = Math.random();
-                BossEnemy.BossType bossType;
-                if (roll < 0.33) bossType = BossEnemy.BossType.GHOST;
-                else if (roll < 0.66) bossType = BossEnemy.BossType.DEMON;
-                else bossType = BossEnemy.BossType.DRAGON;
+                BossType bossType;
+                if (roll < 0.33) bossType = BossType.GHOST;
+                else if (roll < 0.66) bossType = BossType.DEMON;
+                else bossType = BossType.DRAGON;
 
                 BossEnemy boss = new BossEnemy(bx, by, EnemyType.TANK, world, bossType);
                 
-                // HP NÖVELÉS:
                 boss.maxHp *= (1.0f + ((bossesSpawnedCount + 1) * 0.2f));
                 boss.hp = boss.maxHp;
                 
-                bossesSpawnedCount++; // Növeljük a számlálót
+                bossesSpawnedCount++; 
 
                 world.getEnemies().add(boss);
                 System.out.println("Boss spawned! Total bosses so far: " + bossesSpawnedCount);
 
-                // 🧹 Minden kis ellenség eltűnik, csak a boss marad
                 world.getEnemies().removeIf(e -> !(e instanceof BossEnemy));
             }
         }
-        // --- MÓDOSÍTÁS VÉGE ---
     }
 }

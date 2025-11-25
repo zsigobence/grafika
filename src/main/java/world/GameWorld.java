@@ -38,22 +38,15 @@ public class GameWorld {
     private List<VisualEffect> visualEffects = new ArrayList<>();
     public List<VisualEffect> getVisualEffects() { return visualEffects; }
 
-    // --- RENDSZEREK ---
     private EnemySpawner enemySpawner;
     private CollisionSystem collisionSystem;
     private LevelingSystem levelingSystem;
-    private SpatialGrid spatialGrid; // <-- ÚJ: A rács referencia
+    private SpatialGrid spatialGrid;
     
-    // Javasolt cellaméret (az ellenségek méretéhez igazítva)
     private static final int GRID_CELL_SIZE = 200;
     
-    
-    /**
-     * Visszaállítja a játékvilágot a kezdőállapotba.
-     * Nem tölti újra a hangokat, de minden mást igen.
-     */
+    // Játékállapot alaphelyzetbe állítása
     public void reset() {
-        // Listák kiürítése
         bullets.clear();
         enemies.clear();
         xpOrbs.clear();
@@ -62,7 +55,6 @@ public class GameWorld {
         gadgets.clear();
         availableGadgets.clear();
         
-        // Statisztikák nullázása
         score = 0;
         xp = 0;
         level = 1;
@@ -70,20 +62,16 @@ public class GameWorld {
         elapsedTime = 0.0;
         pendingLevelUps = 0;
         
-        // Állapotjelzők visszaállítása
         levelUpMenuActive = false;
         gameOver = false;
         isPaused = false;
         
-        // Játékos és rendszerek újrakészítése
         player = new Player(worldWidth / 2.0f, worldHeight / 2.0f, 10, 1, 250f);
-        initGadgets(); // Ez újratölti az alap gadgeteket
+        initGadgets();
         recomputePlayerStats();
         
-        // 1. Rács újrakészítése
         spatialGrid = new SpatialGrid(worldWidth, worldHeight, GRID_CELL_SIZE);
         
-        // 2. Többi rendszer újrakészítése
         enemySpawner = new EnemySpawner(this, player);
         levelingSystem = new LevelingSystem(this, player);
         collisionSystem = new CollisionSystem(this, player, levelingSystem, spatialGrid);
@@ -92,35 +80,32 @@ public class GameWorld {
 
 
     public void init() {
-        // Először hívjuk az új reset metódust, ami beállít mindent
         reset();
-        
-        // A hangokat elég egyszer betölteni a játék indulásakor
         loadSounds();
     }
     
     public void update(float deltaTime) {
-    	if (levelUpMenuActive || isPaused() || isGameOver()) return;
+        if (levelUpMenuActive || isPaused() || isGameOver()) return;
 
         elapsedTime += deltaTime;
         
-        // 1. Játékos és Gadgetek frissítése (Input alapján)
+        // Játékos és gadgetek frissítése
         player.update(deltaTime, enemies);
         if (player.isReadyToShoot()) {
             spawnPlayerBullets();
         }
         gadgetSystem.update(deltaTime);
 
-        // 2. Entitások mozgatása és logikája (ÜTKÖZÉS NÉLKÜL)
+        // Entitások mozgatása
         updateBullets(deltaTime);
         updateEnemies(deltaTime);
-        updateXPOrbs(deltaTime); // Ez már csak mozgatja az orbokat
+        updateXPOrbs(deltaTime);
         updateFloatingTexts(deltaTime);
         
-        // 3. Spawner futtatása (Új entitásokat hoz létre)
+        // Ellenségek létrehozása
         enemySpawner.update(deltaTime);
         
-        // 4. ÚJ LÉPÉS: Rács feltöltése az aktuális pozíciókkal
+        // Térbeli rács frissítése az aktuális pozíciókkal
         spatialGrid.clear();
         spatialGrid.insert(player);
         for (Enemy e : enemies) {
@@ -133,7 +118,7 @@ public class GameWorld {
             spatialGrid.insert(o);
         }
         
-        // 5. Ütközések ellenőrzése (Ez már a gyors, rács-alapú rendszert használja)
+        // Ütközésvizsgálat
         collisionSystem.checkCollisions();
         
         updateVisualEffects(deltaTime);
@@ -146,7 +131,6 @@ public class GameWorld {
         });
     }
     
-    // Getter metódusok, hogy a Renderer és más osztályok hozzáférjenek az adatokhoz
     public Player getPlayer() { return player; }
     public List<Bullet> getBullets() { return bullets; }
     public List<Enemy> getEnemies() { return enemies; }
@@ -162,21 +146,13 @@ public class GameWorld {
         this.isPaused = !this.isPaused; 
     }
 
-    /**
-     * Golyók frissítése (csak mozgás és pályaelhagyás).
-     */
     private void updateBullets(float deltaTime) {
         bullets.removeIf(b -> {
             b.update(deltaTime);
-            // Pálya elhagyás ellenőrzése (marad)
             return b.x < -50 || b.x > worldWidth + 50 || b.y < -50 || b.y > worldHeight + 50;
         });
     }
 
-    /**
-     * Ellenségek frissítése (csak a saját 'update' logikájuk, pl. mozgás).
-     * Az ütközésvizsgálat átkerült a CollisionSystem-be.
-     */
     private void updateEnemies(float deltaTime) {
         Iterator<Enemy> enemyIterator = enemies.iterator();
         while (enemyIterator.hasNext()) {
@@ -185,20 +161,12 @@ public class GameWorld {
         }
     }
 
-    /**
-     * A GadgetSystem (pl. Orbit Blade) hívja, ha megöl egy ellenséget.
-     * Továbbítjuk a LevelingSystem-nek.
-     */
     public void killEnemy(Enemy enemy) {
-    	enemy.onDeath();
+        enemy.onDeath();
         levelingSystem.onEnemyKilled(enemy);
         enemies.remove(enemy);
     }
 
-    /**
-     * XP Orbok frissítése (csak mozgás, vonzódás és pályaelhagyás).
-     * Az ütközésvizsgálat átkerült a CollisionSystem-be.
-     */
     private void updateXPOrbs(float deltaTime) {
         Iterator<XPOrb> xpIter = xpOrbs.iterator();
         while (xpIter.hasNext()) {
@@ -218,17 +186,10 @@ public class GameWorld {
         });
     }
 
-    /**
-     * Az InputHandler hívja. Továbbítjuk a kérést a LevelingSystem-nek.
-     */
     public void selectGadget(Gadget gadget) {
         levelingSystem.selectGadget(gadget);
     }
     
-    // ... (A következő metódusok VÁLTOZATLANOK maradnak a GameWorld-ben) ...
-    // spawnPlayerBullets, recomputePlayerStats, getGadgetLevel, 
-    // getAttackSpeedMultiplier, initGadgets, loadSounds
-
     private void spawnPlayerBullets() {
         Enemy nearest = player.findNearestEnemy(enemies);
         if (nearest != null) {

@@ -23,14 +23,13 @@ public class XPOrb extends GameObject {
         float dy = player.y - y;
         float dist = (float) Math.hypot(dx, dy);
 
+        // Mágneses vonzás és lebegés kezelése
         if (dist < magnetRadius && dist > 1f) {
-            // Mágneses vonzás
             float pullExtra = (magnetRadius - dist) / magnetRadius * magnetPullForce;
             float speedToPlayer = magnetBaseSpeed + pullExtra;
             x += dx / dist * speedToPlayer * deltaTime;
             y += dy / dist * speedToPlayer * deltaTime;
         } else {
-            // Lebegés
             y += Math.sin(glfwGetTime() * 3.0f + this.hashCode()) * 6.0f * deltaTime;
         }
     }

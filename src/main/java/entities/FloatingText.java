@@ -23,6 +23,6 @@ public class FloatingText {
     public void update(float dt) {
         life -= dt;
         y += vy * dt;
-        vy *= 0.98f; // Lassulás
+        vy *= 0.98f; // Lassuló emelkedés
     }
 }
